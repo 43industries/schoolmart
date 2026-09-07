@@ -100,6 +100,15 @@ schoolmart/
 
 Prefer `docker compose up -d` for Postgres + Redis. If Docker Desktop is unavailable, a local PostgreSQL instance works with the same `DATABASE_URL` in `.env` (user `schoolmart` / password `schoolmart_dev` / database `schoolmart`). Redis is optional until Phase 3.
 
+## Deploy (Vercel — web)
+
+1. Import [https://github.com/43industries/schoolmart](https://github.com/43industries/schoolmart) into Vercel.
+2. Set **Root Directory** to `apps/web` (include files outside the root directory).
+3. Framework: Next.js. Install/build commands come from `apps/web/vercel.json` (installs from the monorepo root and builds `@schoolmart/shared` before the web app via Turborepo).
+4. Set env: `NEXT_PUBLIC_API_URL` to your hosted API base (e.g. `https://api.example.com/api/v1`).
+
+The API and Postgres must be hosted separately (Railway, Render, etc.). Vercel only serves the Next.js frontend.
+
 ## Scripts
 
 | Command | Description |
