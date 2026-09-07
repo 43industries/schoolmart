@@ -1,0 +1,733 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  SCHOOL_ADMIN
+  PARENT
+  STUDENT
+  VENDOR
+  DRIVER
+  SUPPORT
+  FINANCE
+}
+
+enum ScopeType {
+  PLATFORM
+  SCHOOL
+  VENDOR
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum SchoolType {
+  PRIVATE_PRIMARY
+  PRIVATE_SECONDARY
+  BOARDING
+  DAY
+  MIXED
+}
+
+enum SchoolStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+  GRADUATED
+}
+
+enum BoardingStatus {
+  BOARDING
+  DAY
+}
+
+enum Relationship {
+  MOTHER
+  FATHER
+  GUARDIAN
+  OTHER
+}
+
+enum LinkStatus {
+  PENDING_SCHOOL_APPROVAL
+  ACTIVE
+  REJECTED
+  REVOKED
+}
+
+enum OrderStatus {
+  DRAFT
+  PENDING_PAYMENT
+  PAYMENT_PROCESSING
+  PAID
+  GROUPED
+  VENDOR_ACCEPTED
+  PREPARING
+  READY_FOR_DISPATCH
+  DISPATCHED
+  IN_TRANSIT
+  RECEIVED_BY_SCHOOL
+  READY_FOR_COLLECTION
+  COLLECTED
+  COMPLETED
+  CANCELLED
+  REFUND_PENDING
+  REFUNDED
+  FAILED
+  DELIVERY_FAILED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  MPESA
+  CARD
+  WALLET
+}
+
+enum VendorStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+  REJECTED
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum DeliveryBatchStatus {
+  PLANNED
+  IN_PROGRESS
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum LedgerAccountCode {
+  PARENT_CASH
+  STUDENT_WALLET
+  PLATFORM_CLEARING
+  VENDOR_PAYABLE
+  SCHOOL_PAYABLE
+  DELIVERY_FEE
+  REFUND
+  PLATFORM_REVENUE
+}
+
+// ─── Phase 1: Identity & School Graph ───────────────────────────────────────
+
+model User {
+  id              String     @id @default(uuid())
+  email           String?    @unique
+  phoneE164       String?    @unique @map("phone_e164")
+  passwordHash    String     @map("password_hash")
+  firstName       String     @map("first_name")
+  lastName        String     @map("last_name")
+  status          UserStatus @default(PENDING_VERIFICATION)
+  emailVerifiedAt DateTime?  @map("email_verified_at")
+  phoneVerifiedAt DateTime?  @map("phone_verified_at")
+  lastLoginAt     DateTime?  @map("last_login_at")
+  totpSecret      String?    @map("totp_secret")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  roles              UserRole[]
+  sessions           Session[]
+  parentProfile      ParentProfile?
+  auditLogs          AuditLog[]
+  approvedLinks      ParentStudentLink[] @relation("ApprovedBy")
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([email])
+  @@index([phoneE164])
+  @@map("users")
+}
+
+model UserRole {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  role      Role
+  scopeType ScopeType @map("scope_type")
+  scopeId   String?   @map("scope_id")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role, scopeType, scopeId])
+  @@index([userId])
+  @@index([scopeType, scopeId])
+  @@map("user_roles")
+}
+
+model Session {
+  id               String    @id @default(uuid())
+  userId           String    @map("user_id")
+  refreshTokenHash String    @map("refresh_token_hash")
+  expiresAt        DateTime  @map("expires_at")
+  ip               String?
+  userAgent        String?   @map("user_agent")
+  revokedAt        DateTime? @map("revoked_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshTokenHash])
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model School {
+  id                    String       @id @default(uuid())
+  name                  String
+  slug                  String       @unique
+  type                  SchoolType
+  county                String
+  town                  String
+  addressLine           String?      @map("address_line")
+  status                SchoolStatus @default(PENDING)
+  boardingSupported     Boolean      @default(false) @map("boarding_supported")
+  collectionPinRequired Boolean      @default(true) @map("collection_pin_required")
+  timezone              String       @default("Africa/Nairobi")
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+
+  settings       SchoolSettings?
+  students       Student[]
+  schoolVendors  SchoolVendor[]
+  schoolProducts SchoolProduct[]
+  deliveryWindows DeliveryWindow[]
+  deliveryBatches DeliveryBatch[]
+  orders         Order[]
+
+  @@index([status])
+  @@index([slug])
+  @@map("schools")
+}
+
+model SchoolSettings {
+  id             String @id @default(uuid())
+  schoolId       String @unique @map("school_id")
+  catalogPolicy  Json   @default("{}") @map("catalog_policy")
+  deliveryNotes  String? @map("delivery_notes")
+  revenueShareBps Int   @default(0) @map("revenue_share_bps")
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@map("school_settings")
+}
+
+model Student {
+  id                String         @id @default(uuid())
+  schoolId          String         @map("school_id")
+  studentNumber     String         @map("student_number")
+  firstName         String         @map("first_name")
+  lastName          String         @map("last_name")
+  preferredName     String?        @map("preferred_name")
+  grade             String
+  className         String?        @map("class_name")
+  boardingStatus    BoardingStatus @map("boarding_status")
+  status            StudentStatus  @default(ACTIVE)
+  collectionPinHash String?        @map("collection_pin_hash")
+  qrSecret          String?        @map("qr_secret")
+  userId            String?        @unique @map("user_id")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  school       School              @relation(fields: [schoolId], references: [id])
+  parentLinks  ParentStudentLink[]
+  wallet       Wallet?
+  orders       Order[]
+
+  @@unique([schoolId, studentNumber])
+  @@index([schoolId])
+  @@map("students")
+}
+
+model ParentProfile {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  links ParentStudentLink[]
+
+  @@map("parent_profiles")
+}
+
+model ParentStudentLink {
+  id              String       @id @default(uuid())
+  parentUserId    String       @map("parent_user_id")
+  studentId       String       @map("student_id")
+  relationship    Relationship
+  status          LinkStatus   @default(PENDING_SCHOOL_APPROVAL)
+  consentedAt     DateTime?    @map("consented_at")
+  approvedByUserId String?     @map("approved_by_user_id")
+  approvedAt      DateTime?    @map("approved_at")
+  rejectedReason  String?      @map("rejected_reason")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  parentProfile ParentProfile @relation(fields: [parentUserId], references: [userId], onDelete: Cascade)
+  student       Student       @relation(fields: [studentId], references: [id])
+  approvedBy    User?         @relation("ApprovedBy", fields: [approvedByUserId], references: [id])
+
+  @@unique([parentUserId, studentId])
+  @@index([parentUserId])
+  @@index([studentId])
+  @@index([status])
+  @@map("parent_student_links")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  actorUserId  String?  @map("actor_user_id")
+  action       String
+  resourceType String   @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  metadata     Json     @default("{}")
+  ip           String?
+  userAgent    String?  @map("user_agent")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  actor User? @relation(fields: [actorUserId], references: [id])
+
+  @@index([resourceType, resourceId])
+  @@index([actorUserId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model PlatformSettings {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}
+
+// ─── Phase 2+: Forward-compatible stubs ──────────────────────────────────────
+
+model Vendor {
+  id          String       @id @default(uuid())
+  name        String
+  slug        String       @unique
+  description String?
+  status      VendorStatus @default(PENDING)
+  contactEmail String?     @map("contact_email")
+  contactPhone String?     @map("contact_phone")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  products      Product[]
+  schoolVendors SchoolVendor[]
+  orders        Order[]
+
+  @@map("vendors")
+}
+
+model Category {
+  id          String  @id @default(uuid())
+  name        String
+  slug        String  @unique
+  description String?
+  parentId    String? @map("parent_id")
+  sortOrder   Int     @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id          String        @id @default(uuid())
+  vendorId    String        @map("vendor_id")
+  categoryId  String?       @map("category_id")
+  name        String
+  slug        String
+  description String?
+  priceMinor  Int           @map("price_minor")
+  currency    String        @default("KES")
+  status      ProductStatus @default(DRAFT)
+  images      Json          @default("[]")
+  metadata    Json          @default("{}")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  vendor         Vendor          @relation(fields: [vendorId], references: [id])
+  category       Category?       @relation(fields: [categoryId], references: [id])
+  inventory      Inventory?
+  schoolProducts SchoolProduct[]
+  orderItems     OrderItem[]
+  cartItems      CartItem[]
+
+  @@unique([vendorId, slug])
+  @@index([vendorId])
+  @@index([status])
+  @@map("products")
+}
+
+model Inventory {
+  id              String   @id @default(uuid())
+  productId       String   @unique @map("product_id")
+  availableQty    Int      @default(0) @map("available_qty")
+  reservedQty     Int      @default(0) @map("reserved_qty")
+  lowStockThreshold Int    @default(5) @map("low_stock_threshold")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("inventory")
+}
+
+model SchoolVendor {
+  id        String   @id @default(uuid())
+  schoolId  String   @map("school_id")
+  vendorId  String   @map("vendor_id")
+  approved  Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  school School @relation(fields: [schoolId], references: [id])
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  @@unique([schoolId, vendorId])
+  @@map("school_vendors")
+}
+
+model SchoolProduct {
+  id        String  @id @default(uuid())
+  schoolId  String  @map("school_id")
+  productId String  @map("product_id")
+  approved  Boolean @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  school  School  @relation(fields: [schoolId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([schoolId, productId])
+  @@map("school_products")
+}
+
+model Cart {
+  id        String   @id @default(uuid())
+  parentUserId String @map("parent_user_id")
+  schoolId  String?  @map("school_id")
+  studentId String?  @map("student_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items CartItem[]
+
+  @@index([parentUserId])
+  @@map("carts")
+}
+
+model CartItem {
+  id        String @id @default(uuid())
+  cartId    String @map("cart_id")
+  productId String @map("product_id")
+  quantity  Int    @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([cartId, productId])
+  @@map("cart_items")
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  orderNumber     String      @unique @map("order_number")
+  parentUserId    String      @map("parent_user_id")
+  studentId       String      @map("student_id")
+  schoolId        String      @map("school_id")
+  vendorId        String?     @map("vendor_id")
+  status          OrderStatus @default(DRAFT)
+  subtotalMinor   Int         @default(0) @map("subtotal_minor")
+  deliveryFeeMinor Int        @default(0) @map("delivery_fee_minor")
+  totalMinor      Int         @default(0) @map("total_minor")
+  currency        String      @default("KES")
+  deliveryDate    DateTime?   @map("delivery_date")
+  notes           String?
+  deliveryBatchId String?     @map("delivery_batch_id")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  student       Student             @relation(fields: [studentId], references: [id])
+  school        School              @relation(fields: [schoolId], references: [id])
+  vendor        Vendor?             @relation(fields: [vendorId], references: [id])
+  deliveryBatch DeliveryBatch?      @relation(fields: [deliveryBatchId], references: [id])
+  items         OrderItem[]
+  statusHistory OrderStatusHistory[]
+  payments      Payment[]
+
+  @@index([parentUserId])
+  @@index([schoolId])
+  @@index([status])
+  @@index([deliveryBatchId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id           String @id @default(uuid())
+  orderId      String @map("order_id")
+  productId    String @map("product_id")
+  productName  String @map("product_name")
+  quantity     Int
+  unitPriceMinor Int  @map("unit_price_minor")
+  totalMinor   Int    @map("total_minor")
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id        String      @id @default(uuid())
+  orderId   String      @map("order_id")
+  fromStatus OrderStatus? @map("from_status")
+  toStatus  OrderStatus @map("to_status")
+  actorUserId String?   @map("actor_user_id")
+  note      String?
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_status_history")
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  orderId        String?       @map("order_id")
+  parentUserId   String        @map("parent_user_id")
+  amountMinor    Int           @map("amount_minor")
+  currency       String        @default("KES")
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+  providerRef    String?       @unique @map("provider_ref")
+  idempotencyKey String        @unique @map("idempotency_key")
+  metadata       Json          @default("{}")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  order Order? @relation(fields: [orderId], references: [id])
+
+  @@index([parentUserId])
+  @@index([status])
+  @@map("payments")
+}
+
+model Wallet {
+  id                    String   @id @default(uuid())
+  studentId             String   @unique @map("student_id")
+  balanceMinor          Int      @default(0) @map("balance_minor")
+  currency              String   @default("KES")
+  lowBalanceThresholdMinor Int   @default(50000) @map("low_balance_threshold_minor")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  student      Student            @relation(fields: [studentId], references: [id])
+  transactions WalletTransaction[]
+  rules        WalletRule[]
+
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id          String   @id @default(uuid())
+  walletId    String   @map("wallet_id")
+  type        String
+  amountMinor Int      @map("amount_minor")
+  balanceAfterMinor Int @map("balance_after_minor")
+  description String?
+  referenceId String?  @map("reference_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@index([walletId])
+  @@index([createdAt])
+  @@map("wallet_transactions")
+}
+
+model WalletRule {
+  id               String  @id @default(uuid())
+  walletId         String  @map("wallet_id")
+  category         String
+  period           String
+  limitMinor       Int     @map("limit_minor")
+  requiresApproval Boolean @default(false) @map("requires_approval")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@map("wallet_rules")
+}
+
+model DeliveryWindow {
+  id        String @id @default(uuid())
+  schoolId  String @map("school_id")
+  name      String
+  startTime String @map("start_time")
+  endTime   String @map("end_time")
+  daysOfWeek Json  @default("[1,2,3,4,5]") @map("days_of_week")
+  active    Boolean @default(true)
+
+  school School @relation(fields: [schoolId], references: [id])
+
+  @@index([schoolId])
+  @@map("delivery_windows")
+}
+
+model DeliveryBatch {
+  id          String              @id @default(uuid())
+  schoolId    String              @map("school_id")
+  batchNumber String              @unique @map("batch_number")
+  deliveryDate DateTime           @map("delivery_date")
+  status      DeliveryBatchStatus @default(PLANNED)
+  orderCount  Int                 @default(0) @map("order_count")
+  manifest    Json                @default("{}")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  school School  @relation(fields: [schoolId], references: [id])
+  orders Order[]
+
+  @@index([schoolId])
+  @@index([deliveryDate])
+  @@map("delivery_batches")
+}
+
+model Notification {
+  id        String              @id @default(uuid())
+  userId    String              @map("user_id")
+  channel   NotificationChannel
+  title     String
+  body      String
+  read      Boolean             @default(false)
+  metadata  Json                @default("{}")
+  createdAt DateTime            @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([read])
+  @@map("notifications")
+}
+
+model SupportTicket {
+  id          String         @id @default(uuid())
+  userId      String         @map("user_id")
+  category    String
+  priority    TicketPriority @default(MEDIUM)
+  status      TicketStatus   @default(OPEN)
+  subject     String
+  description String
+  orderRef    String?        @map("order_ref")
+  assignedTo  String?        @map("assigned_to")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  messages SupportMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id        String   @id @default(uuid())
+  ticketId  String   @map("ticket_id")
+  senderId  String   @map("sender_id")
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("support_messages")
+}
+
+model LedgerEntry {
+  id          String            @id @default(uuid())
+  accountCode LedgerAccountCode @map("account_code")
+  debitMinor  Int               @default(0) @map("debit_minor")
+  creditMinor Int               @default(0) @map("credit_minor")
+  currency    String            @default("KES")
+  referenceType String          @map("reference_type")
+  referenceId String            @map("reference_id")
+  description String?
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  @@index([referenceType, referenceId])
+  @@index([accountCode])
+  @@index([createdAt])
+  @@map("ledger_entries")
+}
