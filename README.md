@@ -96,18 +96,56 @@ schoolmart/
 - [x] Parent cart (add/update items, stock checks)
 - [x] Portal UI: `/parent/shop`, `/parent/cart`, `/school/catalog`, `/admin/vendors`, `/admin/products`
 
-## Local database note
+## Deploy
+
+Recommended split: **Vercel (web)** + **Railway (API + Postgres)**.
+
+### 1. Railway — API + Postgres
+
+1. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub** → select `43industries/schoolmart`.
+2. Add a **PostgreSQL** plugin to the project.
+3. On the API service (the GitHub-linked service):
+   - Leave **Root Directory** empty (monorepo root).
+   - Railway will use [`railway.toml`](railway.toml): builds with `pnpm build:api`, starts with `pnpm start:api` (runs migrations, then the API).
+4. Set variables on the API service (Variables tab):
+
+| Variable | Value |
+|----------|--------|
+| `DATABASE_URL` | From the Postgres plugin (Railway can reference `${{Postgres.DATABASE_URL}}`) |
+| `NODE_ENV` | `production` |
+| `JWT_SECRET` | Long random string |
+| `COOKIE_SECRET` | Long random string |
+| `WEB_URL` | Your Vercel URL, e.g. `https://schoolmart.vercel.app` |
+| `DEMO_PASSWORD` | Only if you seed demo accounts |
+
+5. Deploy. Open the public URL → check `https://<your-api>/health`.
+6. Optional seed (one-off in Railway shell / local against prod DB):
+
+```bash
+pnpm db:seed
+```
+
+Copy the Railway public API URL, e.g. `https://schoolmart-api-production.up.railway.app`.
+
+### 2. Vercel — web
+
+1. Import the same GitHub repo into [Vercel](https://vercel.com).
+2. Set **Root Directory** to `apps/web` and **include files outside the root directory**.
+3. Env:
+
+| Variable | Value |
+|----------|--------|
+| `NEXT_PUBLIC_API_URL` | `https://<your-railway-api>/api/v1` |
+
+4. Deploy. Then set Railway `WEB_URL` to the Vercel URL if you hadn’t already, and redeploy the API so CORS matches.
+
+### Cross-origin auth
+
+Production cookies use `SameSite=None; Secure` so login works when the web app (Vercel) and API (Railway) are on different domains. The browser frontend must keep calling the API with `credentials: "include"` (already configured).
+
+### Local database note
 
 Prefer `docker compose up -d` for Postgres + Redis. If Docker Desktop is unavailable, a local PostgreSQL instance works with the same `DATABASE_URL` in `.env` (user `schoolmart` / password `schoolmart_dev` / database `schoolmart`). Redis is optional until Phase 3.
-
-## Deploy (Vercel — web)
-
-1. Import [https://github.com/43industries/schoolmart](https://github.com/43industries/schoolmart) into Vercel.
-2. Set **Root Directory** to `apps/web` (include files outside the root directory).
-3. Framework: Next.js. Install/build commands come from `apps/web/vercel.json` (installs from the monorepo root and builds `@schoolmart/shared` before the web app via Turborepo).
-4. Set env: `NEXT_PUBLIC_API_URL` to your hosted API base (e.g. `https://api.example.com/api/v1`).
-
-The API and Postgres must be hosted separately (Railway, Render, etc.). Vercel only serves the Next.js frontend.
 
 ## Scripts
 
@@ -115,6 +153,9 @@ The API and Postgres must be hosted separately (Railway, Render, etc.). Vercel o
 |---------|-------------|
 | `pnpm dev` | Start all apps in development |
 | `pnpm build` | Build all apps |
+| `pnpm build:web` | Build web + shared deps (Vercel) |
+| `pnpm build:api` | Build API + shared/db deps (Railway) |
+| `pnpm start:api` | Migrate DB then start API |
 | `pnpm test` | Run all tests |
 | `pnpm lint` | Lint all packages |
 | `pnpm typecheck` | Type-check all packages |

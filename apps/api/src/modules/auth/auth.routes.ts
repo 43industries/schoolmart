@@ -23,10 +23,12 @@ import { config } from "../../config.js";
 import { ValidationError } from "../../lib/errors.js";
 
 function setAuthCookies(reply: { setCookie: (name: string, value: string, opts: object) => void }, accessToken: string, refreshToken: string) {
+  // Cross-origin (Vercel web + Railway API) needs SameSite=None; Secure
+  const crossOrigin = !config.isDev;
   const cookieOpts = {
     httpOnly: true,
-    secure: !config.isDev,
-    sameSite: "lax" as const,
+    secure: crossOrigin,
+    sameSite: (crossOrigin ? "none" : "lax") as "none" | "lax",
     path: "/",
   };
   reply.setCookie("accessToken", accessToken, { ...cookieOpts, maxAge: 900 });

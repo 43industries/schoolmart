@@ -1,7 +1,8 @@
 import "dotenv/config";
 
 export const config = {
-  port: parseInt(process.env.API_PORT ?? "4000", 10),
+  // Railway/Render set PORT; local/dev can use API_PORT
+  port: parseInt(process.env.PORT ?? process.env.API_PORT ?? "4000", 10),
   host: process.env.API_HOST ?? "0.0.0.0",
   nodeEnv: process.env.NODE_ENV ?? "development",
   jwtSecret: process.env.JWT_SECRET ?? "dev-secret-change-me",

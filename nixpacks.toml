@@ -1,0 +1,7 @@
+# Nixpacks hints for Railway / similar hosts
+[variables]
+NODE_ENV = "production"
+NIXPACKS_NODE_VERSION = "20"
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "openssl"]

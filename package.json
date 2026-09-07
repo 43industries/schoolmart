@@ -5,6 +5,8 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "build:web": "turbo build --filter=@schoolmart/web",
+    "build:api": "turbo build --filter=@schoolmart/api",
+    "start:api": "pnpm --filter @schoolmart/db migrate:deploy && pnpm --filter @schoolmart/api start",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",

@@ -141,6 +141,9 @@ importers:
       '@prisma/client':
         specifier: ^6.1.0
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      prisma:
+        specifier: ^6.1.0
+        version: 6.19.3(typescript@5.9.3)
     devDependencies:
       '@schoolmart/config':
         specifier: workspace:*
@@ -151,9 +154,6 @@ importers:
       argon2:
         specifier: ^0.41.1
         version: 0.41.1
-      prisma:
-        specifier: ^6.1.0
-        version: 6.19.3(typescript@5.9.3)
       tsx:
         specifier: ^4.19.2
         version: 4.23.13
