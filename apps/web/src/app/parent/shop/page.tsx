@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
-import { catalogApi, cartApi, parentsApi, type Product, type ParentLink, type Category } from "@/lib/api";
+import { catalogApi, cartApi, parentsApi, resolveMediaUrl, productPrimaryImage, type Product, type ParentLink, type Category } from "@/lib/api";
 import { PortalLayout } from "@/components/layout/portal-layout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -121,10 +121,17 @@ export default function ShopPage() {
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {products.map((p) => (
+          {products.map((p) => {
+            const thumb = productPrimaryImage(p);
+            return (
             <Card key={p.id} className="flex flex-col overflow-hidden !p-0">
-              <div className="flex h-36 items-center justify-center bg-brand-teal/5">
-                <Package className="h-12 w-12 text-brand-teal/40" />
+              <div className="relative flex h-36 items-center justify-center overflow-hidden bg-brand-teal/5">
+                {thumb ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={resolveMediaUrl(thumb)} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <Package className="h-12 w-12 text-brand-teal/40" />
+                )}
               </div>
               <div className="flex flex-1 flex-col p-5">
                 <p className="text-xs font-medium uppercase tracking-wide text-brand-muted">{p.category?.name ?? "Product"}</p>
@@ -137,7 +144,8 @@ export default function ShopPage() {
                 </div>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
     </PortalLayout>

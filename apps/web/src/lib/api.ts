@@ -293,9 +293,29 @@ export interface Product {
   description?: string | null;
   priceMinor: number;
   status: string;
+  images?: string[] | null;
   vendor?: { id: string; name: string };
   category?: { id: string; name: string } | null;
   inventory?: { availableQty: number } | null;
+}
+
+/** Resolve product/media paths for <img src> across local, Vercel proxy, and absolute API URL. */
+export function resolveMediaUrl(pathOrUrl: string | null | undefined): string {
+  if (!pathOrUrl) return "";
+  if (/^(https?:|data:|blob:)/i.test(pathOrUrl)) return pathOrUrl;
+  const path = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
+  if (API_URL.startsWith("http")) {
+    const origin = API_URL.replace(/\/api\/v1\/?$/, "");
+    return `${origin}${path}`;
+  }
+  return path;
+}
+
+export function productPrimaryImage(product: { images?: string[] | null }): string | null {
+  const images = product.images;
+  if (!Array.isArray(images) || images.length === 0) return null;
+  const first = images.find((v) => typeof v === "string" && v.length > 0);
+  return first ?? null;
 }
 
 export interface CartResponse {
@@ -377,6 +397,30 @@ export const vendorApi = {
     api<Product>("/vendors/me/products", { method: "POST", body: data }),
   updateProduct: (id: string, data: Record<string, unknown>) =>
     api<Product>(`/vendors/me/products/${id}`, { method: "PATCH", body: data }),
+  uploadImage: async (file: File) => {
+    const token = getAccessToken();
+    const url = `${API_URL}/vendors/me/products/images`;
+    const body = new FormData();
+    body.append("file", file);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body,
+      });
+    } catch {
+      throw new ApiError(0, `Cannot reach API at ${API_URL} to upload image.`, "NETWORK_ERROR");
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new ApiError(res.status, data.message ?? "Upload failed", data.error, data.details);
+    }
+    return data as { url: string; filename: string; size: number; mimetype: string };
+  },
 };
 
 export interface StudentProfile {

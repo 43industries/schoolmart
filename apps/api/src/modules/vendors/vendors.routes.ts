@@ -25,9 +25,10 @@ import {
   getVendorIdFromUser,
 } from "../../middleware/auth.js";
 import { auditContextFromRequest } from "../audit/audit.service.js";
-import { ForbiddenError, ValidationError } from "../../lib/errors.js";
+import { ForbiddenError, ValidationError, AppError } from "../../lib/errors.js";
 import { VendorStatus, ProductStatus, prisma } from "@schoolmart/db";
 import type { TokenPayload } from "../auth/auth.service.js";
+import { saveProductImage } from "../uploads/uploads.service.js";
 
 export async function publicVendorRoutes(app: FastifyInstance) {
   app.post("/register", async (req, reply) => {
@@ -63,6 +64,20 @@ export async function vendorCatalogRoutes(app: FastifyInstance) {
     const vendorId = resolveVendorId(req.user!);
     const products = await listProducts({ vendorId });
     return reply.send({ products });
+  });
+
+  app.post("/me/products/images", { preHandler: [authenticate, requireVendor()] }, async (req, reply) => {
+    resolveVendorId(req.user!);
+    const file = await req.file();
+    if (!file) throw new AppError(400, "Choose an image file to upload");
+
+    const buffer = await file.toBuffer();
+    const saved = await saveProductImage({
+      buffer,
+      mimetype: file.mimetype,
+      originalFilename: file.filename,
+    });
+    return reply.status(201).send(saved);
   });
 
   app.post("/me/products", { preHandler: [authenticate, requireVendor()] }, async (req, reply) => {

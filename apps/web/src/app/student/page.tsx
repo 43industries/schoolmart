@@ -7,6 +7,8 @@ import {
   studentsApi,
   catalogApi,
   ApiError,
+  resolveMediaUrl,
+  productPrimaryImage,
   type StudentProfile,
   type StudentWallet,
   type StudentCollection,
@@ -217,22 +219,33 @@ export default function StudentPortalPage() {
           <p className="text-sm text-brand-muted">No products available yet.</p>
         ) : (
           <div className="space-y-3">
-            {products.map((p) => (
+            {products.map((p) => {
+              const thumb = productPrimaryImage(p);
+              return (
               <div
                 key={p.id}
                 className="flex flex-col gap-2 rounded-xl border border-gray-100 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
               >
-                <div>
-                  <p className="font-medium text-brand-ink">{p.name}</p>
-                  <p className="text-xs text-brand-muted">
-                    {p.vendor?.name ?? "Vendor"} · {formatKES(p.priceMinor)}
-                  </p>
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-brand-teal/5">
+                    {thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={resolveMediaUrl(thumb)} alt="" className="h-full w-full object-cover" />
+                    ) : null}
+                  </div>
+                  <div>
+                    <p className="font-medium text-brand-ink">{p.name}</p>
+                    <p className="text-xs text-brand-muted">
+                      {p.vendor?.name ?? "Vendor"} · {formatKES(p.priceMinor)}
+                    </p>
+                  </div>
                 </div>
                 <Button type="button" variant="secondary" disabled={busy} onClick={() => handleRequest(p.id)}>
                   Request
                 </Button>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
         {requests.length > 0 && (

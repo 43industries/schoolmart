@@ -179,7 +179,21 @@ export const createProductSchema = z.object({
   status: z.enum(PRODUCT_STATUSES).default("DRAFT"),
   availableQty: z.number().int().min(0).default(0),
   lowStockThreshold: z.number().int().min(0).default(5),
-  images: z.array(z.string().url().max(2000)).max(10).default([]),
+  images: z
+    .array(
+      z
+        .string()
+        .max(2000)
+        .refine(
+          (v) =>
+            /^https?:\/\//i.test(v) ||
+            v.startsWith("/api/v1/uploads/") ||
+            v.startsWith("data:image/"),
+          { message: "Invalid image URL" },
+        ),
+    )
+    .max(10)
+    .default([]),
 });
 
 export const updateProductSchema = createProductSchema.partial().omit({ vendorId: true });

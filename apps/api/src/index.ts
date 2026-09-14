@@ -3,6 +3,8 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
+import multipart from "@fastify/multipart";
+import fastifyStatic from "@fastify/static";
 import { config } from "./config.js";
 import { AppError, ValidationError } from "./lib/errors.js";
 import { authRoutes, userRoutes, adminUserRoutes } from "./modules/auth/auth.routes.js";
@@ -24,12 +26,15 @@ import {
   publicVendorRoutes,
   vendorCatalogRoutes,
 } from "./modules/vendors/vendors.routes.js";
+import { ensureUploadDirs, getUploadRoot, MAX_IMAGE_BYTES } from "./modules/uploads/uploads.service.js";
 
 const app = Fastify({
   logger: {
     level: config.isDev ? "info" : "warn",
   },
 });
+
+await ensureUploadDirs();
 
 await app.register(helmet, { contentSecurityPolicy: false });
 await app.register(cors, {
@@ -45,6 +50,17 @@ await app.register(cors, {
 });
 await app.register(cookie, { secret: config.cookieSecret });
 await app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
+await app.register(multipart, {
+  limits: {
+    fileSize: MAX_IMAGE_BYTES,
+    files: 5,
+  },
+});
+await app.register(fastifyStatic, {
+  root: getUploadRoot(),
+  prefix: "/api/v1/uploads/",
+  decorateReply: false,
+});
 
 // Allow empty JSON bodies (e.g. POST /auth/refresh with `{}` or blank).
 app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
