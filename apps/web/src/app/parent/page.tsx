@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, getPrimaryRole, getDashboardPath } from "@/lib/auth-context";
 import { parentsApi, walletsApi, activitiesApi, type ParentLink } from "@/lib/api";
 import { formatKES } from "@schoolmart/shared";
 import { PortalLayout } from "@/components/layout/portal-layout";
@@ -43,7 +43,7 @@ export default function ParentDashboard() {
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
-    if (user && !user.roles.some((r) => r.role === "PARENT")) router.push("/dashboard");
+    if (user && !user.roles.some((r) => r.role === "PARENT")) router.push(getDashboardPath(getPrimaryRole(user)));
   }, [user, loading, router]);
 
   useEffect(() => {

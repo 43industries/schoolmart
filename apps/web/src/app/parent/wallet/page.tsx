@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, getPrimaryRole, getDashboardPath } from "@/lib/auth-context";
 import { walletsApi, ApiError, type ParentWalletSummary, type ParentWalletDetail } from "@/lib/api";
 import { formatKES, toMinorUnits, WALLET_RULE_CATEGORIES, WALLET_RULE_PERIODS } from "@schoolmart/shared";
 import { PortalLayout } from "@/components/layout/portal-layout";
@@ -67,7 +67,7 @@ export default function ParentWalletPage() {
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
-    if (user && !user.roles.some((r) => r.role === "PARENT")) router.push("/dashboard");
+    if (user && !user.roles.some((r) => r.role === "PARENT")) router.push(getDashboardPath(getPrimaryRole(user)));
   }, [user, loading, router]);
 
   useEffect(() => {

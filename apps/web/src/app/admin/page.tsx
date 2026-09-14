@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, getPrimaryRole, getDashboardPath } from "@/lib/auth-context";
 import { adminApi } from "@/lib/api";
 import { PortalLayout } from "@/components/layout/portal-layout";
 import { Card } from "@/components/ui/card";
@@ -25,7 +25,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!loading && !user) router.push("/login");
     if (user && !user.roles.some((r) => r.role === "SUPER_ADMIN" || r.role === "FINANCE")) {
-      router.push("/dashboard");
+      router.push(getDashboardPath(getPrimaryRole(user)));
     }
   }, [user, loading, router]);
 

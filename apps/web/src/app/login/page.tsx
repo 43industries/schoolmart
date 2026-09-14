@@ -12,7 +12,7 @@ import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/ca
 import { Logo } from "@/components/ui/logo";
 
 export default function LoginPage() {
-  const { login, user, loading: authLoading } = useAuth();
+  const { login, user } = useAuth();
   const router = useRouter();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -20,9 +20,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (authLoading || !user) return;
+    if (!user) return;
     router.replace(getDashboardPath(getPrimaryRole(user)));
-  }, [user, authLoading, router]);
+  }, [user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,9 +35,13 @@ export default function LoginPage() {
       if (err instanceof ApiError) {
         const hint =
           process.env.NODE_ENV === "development" && err.status === 401
-            ? " Check email/password - demo accounts use Demo@SchoolMart2026."
+            ? " Check email/password — demo accounts use Demo@SchoolMart2026."
             : "";
-        setError(`${err.message}${hint}`);
+        const req =
+          process.env.NODE_ENV === "development" && err.requestId
+            ? ` [${err.requestId}]`
+            : "";
+        setError(`${err.message}${hint}${req}`);
       } else {
         setError("Login failed");
       }
@@ -46,10 +50,10 @@ export default function LoginPage() {
     }
   };
 
-  if (authLoading || user) {
+  if (user) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-brand-muted">
-        {user ? "Redirecting..." : "Loading..."}
+        Redirecting...
       </div>
     );
   }

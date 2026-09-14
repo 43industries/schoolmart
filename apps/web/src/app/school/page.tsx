@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, getPrimaryRole, getDashboardPath } from "@/lib/auth-context";
 import { schoolAdminApi } from "@/lib/api";
 import { PortalLayout } from "@/components/layout/portal-layout";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -29,7 +29,7 @@ export default function SchoolDashboard() {
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
-    if (user && !user.roles.some((r) => r.role === "SCHOOL_ADMIN")) router.push("/dashboard");
+    if (user && !user.roles.some((r) => r.role === "SCHOOL_ADMIN")) router.push(getDashboardPath(getPrimaryRole(user)));
   }, [user, loading, router]);
 
   useEffect(() => {

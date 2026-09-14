@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, getPrimaryRole, getDashboardPath } from "@/lib/auth-context";
 import { studentsApi, ApiError, type StudentProfile, type StudentWallet, type StudentCollection } from "@/lib/api";
 import { formatKES } from "@schoolmart/shared";
 import { PortalLayout } from "@/components/layout/portal-layout";
@@ -44,7 +44,7 @@ export default function StudentPortalPage() {
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
-    if (user && !user.roles.some((r) => r.role === "STUDENT")) router.push("/dashboard");
+    if (user && !user.roles.some((r) => r.role === "STUDENT")) router.push(getDashboardPath(getPrimaryRole(user)));
   }, [user, loading, router]);
 
   const load = async () => {
