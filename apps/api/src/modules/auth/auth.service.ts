@@ -100,15 +100,17 @@ export async function registerParent(input: RegisterInput, ctx: AuditContext): P
 
 export async function login(input: LoginInput, ctx: AuditContext): Promise<AuthTokens & { user: TokenPayload }> {
   const identifier = input.identifier.trim();
-  let user = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { email: identifier.toLowerCase() },
-        { phoneE164: normalizeKenyaPhone(identifier) ?? undefined },
-      ],
-    },
-    include: { roles: true },
-  });
+  const email = identifier.includes("@") ? identifier.toLowerCase() : null;
+  const phone = normalizeKenyaPhone(identifier);
+
+  if (!email && !phone) throw new UnauthorizedError("Invalid credentials");
+
+  const user = email
+    ? await prisma.user.findUnique({ where: { email }, include: { roles: true } })
+    : await prisma.user.findFirst({
+        where: { phoneE164: phone! },
+        include: { roles: true },
+      });
 
   if (!user) throw new UnauthorizedError("Invalid credentials");
 

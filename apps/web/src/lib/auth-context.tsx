@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { authApi, setAccessToken, type UserProfile } from "@/lib/api";
 
 interface AuthContextValue {
@@ -16,16 +16,20 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const authGen = useRef(0);
 
   const refresh = useCallback(async () => {
+    const gen = authGen.current;
     try {
       const profile = await authApi.me();
+      if (gen !== authGen.current) return;
       setUser(profile);
     } catch {
+      if (gen !== authGen.current) return;
       setAccessToken(null);
       setUser(null);
     } finally {
-      setLoading(false);
+      if (gen === authGen.current) setLoading(false);
     }
   }, []);
 
@@ -34,15 +38,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const login = async (identifier: string, password: string) => {
+    const gen = ++authGen.current;
     const result = await authApi.login({ identifier: identifier.trim(), password });
     setAccessToken(result.accessToken);
     const profile = await authApi.me();
+    if (gen !== authGen.current) return profile;
     setUser(profile);
     setLoading(false);
     return profile;
   };
 
   const logout = async () => {
+    authGen.current += 1;
     try {
       await authApi.logout();
     } catch {

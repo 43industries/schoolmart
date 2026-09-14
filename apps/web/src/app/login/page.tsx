@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -12,18 +12,17 @@ import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/ca
 import { Logo } from "@/components/ui/logo";
 
 export default function LoginPage() {
-  const { login, user } = useAuth();
+  const { login, user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  if (user) {
-    const role = getPrimaryRole(user);
-    router.push(getDashboardPath(role));
-    return null;
-  }
+  useEffect(() => {
+    if (authLoading || !user) return;
+    router.replace(getDashboardPath(getPrimaryRole(user)));
+  }, [user, authLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,14 +30,29 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const profile = await login(identifier, password);
-      const role = getPrimaryRole(profile);
-      router.push(getDashboardPath(role));
+      router.replace(getDashboardPath(getPrimaryRole(profile)));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Login failed");
+      if (err instanceof ApiError) {
+        const hint =
+          process.env.NODE_ENV === "development" && err.status === 401
+            ? " Check email/password - demo accounts use Demo@SchoolMart2026."
+            : "";
+        setError(`${err.message}${hint}`);
+      } else {
+        setError("Login failed");
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  if (authLoading || user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-brand-muted">
+        {user ? "Redirecting..." : "Loading..."}
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen">
