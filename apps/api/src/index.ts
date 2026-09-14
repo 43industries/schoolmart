@@ -21,7 +21,9 @@ import {
 } from "./modules/activities/activities.routes.js";
 
 const app = Fastify({
-  logger: config.isDev,
+  logger: {
+    level: config.isDev ? "info" : "warn",
+  },
 });
 
 await app.register(helmet, { contentSecurityPolicy: false });
@@ -39,19 +41,30 @@ await app.register(cors, {
 await app.register(cookie, { secret: config.cookieSecret });
 await app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
 
-app.setErrorHandler((error, _req, reply) => {
+app.setErrorHandler((error, req, reply) => {
+  const requestId = req.id;
   if (error instanceof AppError) {
+    if (error.statusCode >= 500) {
+      req.log.error({ err: error, requestId, route: req.routeOptions?.url }, error.message);
+    } else if (error.statusCode >= 400) {
+      req.log.warn({ requestId, route: req.routeOptions?.url, code: error.code }, error.message);
+    }
     return reply.status(error.statusCode).send({
       error: error.code ?? "ERROR",
       message: error.message,
+      requestId,
       ...(error instanceof ValidationError && error.details ? { details: error.details } : {}),
     });
   }
 
-  app.log.error(error);
+  req.log.error(
+    { err: error, requestId, route: req.routeOptions?.url },
+    (error as Error).message ?? "Internal error",
+  );
   return reply.status(500).send({
     error: "INTERNAL_ERROR",
     message: config.isDev ? (error as Error).message : "An unexpected error occurred",
+    requestId,
   });
 });
 

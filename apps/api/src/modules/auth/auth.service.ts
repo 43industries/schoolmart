@@ -98,20 +98,35 @@ export async function registerParent(input: RegisterInput, ctx: AuditContext): P
   return { userId: result.user.id, linkId: result.link.id };
 }
 
+/** Pure helper: map login identifier to email or E.164 phone lookup key. */
+export function parseLoginIdentifier(
+  identifier: string,
+): { kind: "email"; email: string } | { kind: "phone"; phone: string } | null {
+  const trimmed = identifier.trim();
+  if (!trimmed) return null;
+  if (trimmed.includes("@")) {
+    return { kind: "email", email: trimmed.toLowerCase() };
+  }
+  const phone = normalizeKenyaPhone(trimmed);
+  if (phone) return { kind: "phone", phone };
+  return null;
+}
+
+export async function resolveLoginUser(identifier: string) {
+  const lookup = parseLoginIdentifier(identifier);
+  if (!lookup) return null;
+
+  if (lookup.kind === "email") {
+    return prisma.user.findUnique({ where: { email: lookup.email }, include: { roles: true } });
+  }
+  return prisma.user.findFirst({
+    where: { phoneE164: lookup.phone },
+    include: { roles: true },
+  });
+}
+
 export async function login(input: LoginInput, ctx: AuditContext): Promise<AuthTokens & { user: TokenPayload }> {
-  const identifier = input.identifier.trim();
-  const email = identifier.includes("@") ? identifier.toLowerCase() : null;
-  const phone = normalizeKenyaPhone(identifier);
-
-  if (!email && !phone) throw new UnauthorizedError("Invalid credentials");
-
-  const user = email
-    ? await prisma.user.findUnique({ where: { email }, include: { roles: true } })
-    : await prisma.user.findFirst({
-        where: { phoneE164: phone! },
-        include: { roles: true },
-      });
-
+  const user = await resolveLoginUser(input.identifier);
   if (!user) throw new UnauthorizedError("Invalid credentials");
 
   if (user.status === UserStatus.SUSPENDED || user.status === UserStatus.DISABLED) {

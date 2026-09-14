@@ -7,6 +7,7 @@ export class ApiError extends Error {
     message: string,
     public code?: string,
     public details?: unknown,
+    public requestId?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -36,17 +37,21 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     ...rest,
     credentials: "include",
     headers: {
-      "Content-Type": "application/json",
+      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new ApiError(res.status, data.message ?? "Request failed", data.error, data.details);
+    const requestId = typeof data.requestId === "string" ? data.requestId : undefined;
+    if (process.env.NODE_ENV === "development") {
+      console.error("[api]", path, res.status, requestId ?? "(no requestId)", data.message ?? "Request failed");
+    }
+    throw new ApiError(res.status, data.message ?? "Request failed", data.error, data.details, requestId);
   }
 
   return data as T;
@@ -121,6 +126,9 @@ export const authApi = {
     }>("/auth/login", { method: "POST", body: data }),
 
   logout: () => api<{ success: boolean }>("/auth/logout", { method: "POST" }),
+
+  refresh: () =>
+    api<{ accessToken: string; refreshToken: string }>("/auth/refresh", { method: "POST" }),
 
   me: () => api<UserProfile>("/users/me"),
 };

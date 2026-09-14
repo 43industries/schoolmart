@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from "react";
-import { authApi, setAccessToken, type UserProfile } from "@/lib/api";
+import { authApi, getAccessToken, setAccessToken, type UserProfile } from "@/lib/api";
 
 interface AuthContextValue {
   user: UserProfile | null;
@@ -21,6 +21,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     const gen = authGen.current;
     try {
+      if (!getAccessToken()) {
+        const tokens = await authApi.refresh();
+        if (gen !== authGen.current) return;
+        setAccessToken(tokens.accessToken);
+      }
       const profile = await authApi.me();
       if (gen !== authGen.current) return;
       setUser(profile);
