@@ -41,6 +41,16 @@ await app.register(cors, {
 await app.register(cookie, { secret: config.cookieSecret });
 await app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
 
+// Allow empty JSON bodies (e.g. POST /auth/refresh with `{}` or blank).
+app.addContentTypeParser("application/json", { parseAs: "string" }, (req, body, done) => {
+  try {
+    const text = typeof body === "string" ? body : "";
+    done(null, text.length ? JSON.parse(text) : {});
+  } catch (err) {
+    done(err as Error, undefined);
+  }
+});
+
 app.setErrorHandler((error, req, reply) => {
   const requestId = req.id;
   if (error instanceof AppError) {

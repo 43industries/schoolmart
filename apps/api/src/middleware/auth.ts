@@ -12,14 +12,24 @@ declare module "fastify" {
 export async function authenticate(req: FastifyRequest, _reply: FastifyReply) {
   const authHeader = req.headers.authorization;
   const cookieToken = (req.cookies as Record<string, string | undefined>)?.accessToken;
+  const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
 
-  const token = authHeader?.startsWith("Bearer ")
-    ? authHeader.slice(7)
-    : cookieToken;
+  // Prefer Bearer, but fall back to cookie when sessionStorage holds a stale JWT.
+  if (bearer) {
+    try {
+      req.user = verifyAccessToken(bearer);
+      return;
+    } catch {
+      // try cookie next
+    }
+  }
 
-  if (!token) throw new UnauthorizedError();
+  if (cookieToken) {
+    req.user = verifyAccessToken(cookieToken);
+    return;
+  }
 
-  req.user = verifyAccessToken(token);
+  throw new UnauthorizedError(bearer ? "Invalid or expired token" : undefined);
 }
 
 export function requireRole(...roles: Role[]) {

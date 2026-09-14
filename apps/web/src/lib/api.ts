@@ -128,7 +128,10 @@ export const authApi = {
   logout: () => api<{ success: boolean }>("/auth/logout", { method: "POST" }),
 
   refresh: () =>
-    api<{ accessToken: string; refreshToken: string }>("/auth/refresh", { method: "POST" }),
+    api<{ accessToken: string; refreshToken: string }>("/auth/refresh", {
+      method: "POST",
+      body: {},
+    }),
 
   me: () => api<UserProfile>("/users/me"),
 };
