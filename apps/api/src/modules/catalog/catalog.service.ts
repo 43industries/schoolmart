@@ -62,6 +62,22 @@ export async function listSchoolVendors(schoolId: string) {
   });
 }
 
+/** Platform-approved vendors not yet linked (or all for picking). */
+export async function listAvailableVendorsForSchool(schoolId: string) {
+  const linked = await prisma.schoolVendor.findMany({
+    where: { schoolId },
+    select: { vendorId: true },
+  });
+  const linkedIds = linked.map((l) => l.vendorId);
+  return prisma.vendor.findMany({
+    where: {
+      status: VendorStatus.APPROVED,
+      ...(linkedIds.length ? { id: { notIn: linkedIds } } : {}),
+    },
+    orderBy: { name: "asc" },
+  });
+}
+
 export async function listSchoolProducts(schoolId: string) {
   return prisma.schoolProduct.findMany({
     where: { schoolId },
@@ -88,6 +104,20 @@ export async function approveSchoolVendor(schoolId: string, vendorId: string, ap
     update: { approved },
     include: { vendor: true },
   });
+
+  if (approved) {
+    const products = await prisma.product.findMany({
+      where: { vendorId, status: ProductStatus.ACTIVE },
+      select: { id: true },
+    });
+    for (const p of products) {
+      await prisma.schoolProduct.upsert({
+        where: { schoolId_productId: { schoolId, productId: p.id } },
+        create: { schoolId, productId: p.id, approved: false },
+        update: {},
+      });
+    }
+  }
 
   await writeAuditLog({
     action: approved ? "SCHOOL_VENDOR_APPROVED" : "SCHOOL_VENDOR_REVOKED",

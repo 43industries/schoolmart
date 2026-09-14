@@ -166,6 +166,21 @@ enum ActivityRegistrationStatus {
   REJECTED
 }
 
+enum StudentRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ADDED_TO_CART
+}
+
+enum WalletSpendStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
 enum LedgerAccountCode {
   PARENT_CASH
   STUDENT_WALLET
@@ -319,6 +334,8 @@ model Student {
   wallet       Wallet?
   orders       Order[]
   activityRegistrations ActivityRegistration[]
+  productRequests StudentProductRequest[]
+  spendRequests WalletSpendRequest[]
 
   @@unique([schoolId, studentNumber])
   @@index([schoolId])
@@ -460,6 +477,7 @@ model Product {
   schoolProducts SchoolProduct[]
   orderItems     OrderItem[]
   cartItems      CartItem[]
+  studentRequests StudentProductRequest[]
 
   @@unique([vendorId, slug])
   @@index([vendorId])
@@ -665,6 +683,45 @@ model WalletRule {
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
   @@map("wallet_rules")
+}
+
+model StudentProductRequest {
+  id         String               @id @default(uuid())
+  studentId  String               @map("student_id")
+  productId  String               @map("product_id")
+  quantity   Int                  @default(1)
+  note       String?
+  status     StudentRequestStatus @default(PENDING)
+  createdAt  DateTime             @default(now()) @map("created_at")
+  updatedAt  DateTime             @updatedAt @map("updated_at")
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([studentId, status])
+  @@index([productId])
+  @@map("student_product_requests")
+}
+
+model WalletSpendRequest {
+  id            String            @id @default(uuid())
+  studentId     String            @map("student_id")
+  parentUserId  String            @map("parent_user_id")
+  amountMinor   Int               @map("amount_minor")
+  currency      String            @default("KES")
+  status        WalletSpendStatus @default(PENDING)
+  category      String            @default("ALL")
+  cartSnapshot  Json              @map("cart_snapshot")
+  notes         String?
+  orderId       String?           @map("order_id")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([parentUserId, status])
+  @@index([studentId])
+  @@map("wallet_spend_requests")
 }
 
 model DeliveryWindow {

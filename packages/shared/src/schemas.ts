@@ -179,9 +179,36 @@ export const createProductSchema = z.object({
   status: z.enum(PRODUCT_STATUSES).default("DRAFT"),
   availableQty: z.number().int().min(0).default(0),
   lowStockThreshold: z.number().int().min(0).default(5),
+  images: z.array(z.string().url().max(2000)).max(10).default([]),
 });
 
 export const updateProductSchema = createProductSchema.partial().omit({ vendorId: true });
+
+/** Vendor self-serve create — vendorId comes from JWT scope */
+export const vendorCreateProductSchema = createProductSchema.omit({ vendorId: true });
+export const vendorUpdateProductSchema = vendorCreateProductSchema.partial();
+
+export const checkoutCartSchema = z.object({
+  studentId: z.string().uuid(),
+  schoolId: z.string().uuid(),
+  notes: z.string().max(500).optional(),
+});
+
+export const studentProductRequestSchema = z.object({
+  productId: z.string().uuid(),
+  quantity: z.number().int().min(1).max(99).default(1),
+  note: z.string().max(500).optional(),
+});
+
+export const reviewStudentRequestSchema = z.object({
+  requestId: z.string().uuid(),
+  action: z.enum(["APPROVE", "REJECT"]),
+});
+
+export const approveWalletSpendSchema = z.object({
+  spendRequestId: z.string().uuid(),
+  action: z.enum(["APPROVE", "REJECT"]),
+});
 
 export const catalogSearchSchema = z.object({
   schoolId: z.string().uuid(),
@@ -277,9 +304,15 @@ export type RegisterVendorInput = z.infer<typeof registerVendorSchema>;
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
+export type VendorCreateProductInput = z.infer<typeof vendorCreateProductSchema>;
+export type VendorUpdateProductInput = z.infer<typeof vendorUpdateProductSchema>;
 export type CatalogSearchInput = z.infer<typeof catalogSearchSchema>;
 export type AddCartItemInput = z.infer<typeof addCartItemSchema>;
 export type UpdateCartItemInput = z.infer<typeof updateCartItemSchema>;
+export type CheckoutCartInput = z.infer<typeof checkoutCartSchema>;
+export type StudentProductRequestInput = z.infer<typeof studentProductRequestSchema>;
+export type ReviewStudentRequestInput = z.infer<typeof reviewStudentRequestSchema>;
+export type ApproveWalletSpendInput = z.infer<typeof approveWalletSpendSchema>;
 export type FundWalletInput = z.infer<typeof fundWalletSchema>;
 export type UpsertWalletRuleInput = z.infer<typeof upsertWalletRuleSchema>;
 export type ActivateStudentInput = z.infer<typeof activateStudentSchema>;

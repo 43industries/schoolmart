@@ -274,3 +274,89 @@ export async function listStudentActivities(userId: string) {
     registration: a.registrations[0] ?? null,
   }));
 }
+
+export async function studentSelfRegisterActivity(
+  userId: string,
+  activityId: string,
+  ctx: AuditContext,
+) {
+  const student = await prisma.student.findUnique({ where: { userId } });
+  if (!student) throw new NotFoundError("Student profile not found");
+
+  const parentLink = await prisma.parentStudentLink.findFirst({
+    where: { studentId: student.id, status: LinkStatus.ACTIVE },
+    orderBy: { approvedAt: "asc" },
+  });
+  if (!parentLink) {
+    throw new ForbiddenError("An approved parent link is required before registering");
+  }
+
+  const activity = await prisma.schoolActivity.findUnique({ where: { id: activityId } });
+  if (!activity || activity.status !== ActivityStatus.PUBLISHED) {
+    throw new NotFoundError("Activity not available");
+  }
+  if (activity.schoolId !== student.schoolId) {
+    throw new ForbiddenError("Activity is not at your school");
+  }
+
+  if (activity.capacity != null) {
+    const count = await prisma.activityRegistration.count({
+      where: {
+        activityId: activity.id,
+        status: { in: [ActivityRegistrationStatus.PENDING_PARENT, ActivityRegistrationStatus.CONFIRMED] },
+      },
+    });
+    if (count >= activity.capacity) throw new ConflictError("Activity is full");
+  }
+
+  const existing = await prisma.activityRegistration.findUnique({
+    where: { activityId_studentId: { activityId: activity.id, studentId: student.id } },
+  });
+  if (existing) throw new ConflictError("Already registered for this activity");
+
+  let status: ActivityRegistrationStatus = ActivityRegistrationStatus.CONFIRMED;
+  let paidMinor = 0;
+  let confirmedAt: Date | undefined = new Date();
+
+  if (activity.feeMinor > 0) {
+    const { evaluateWalletSpend, debitWalletSpend } = await import("../cart/checkout.service.js");
+    const evalResult = await evaluateWalletSpend(student.id, activity.feeMinor, "ALL");
+    if (!evalResult.ok || evalResult.requiresApproval) {
+      status = ActivityRegistrationStatus.PENDING_PARENT;
+      confirmedAt = undefined;
+    } else {
+      await debitWalletSpend({
+        studentId: student.id,
+        amountMinor: activity.feeMinor,
+        description: `Activity: ${activity.title}`,
+        referenceId: `activity-${activity.id}-${student.id}`,
+      });
+      paidMinor = activity.feeMinor;
+    }
+  }
+
+  const registration = await prisma.activityRegistration.create({
+    data: {
+      activityId: activity.id,
+      studentId: student.id,
+      parentUserId: parentLink.parentUserId,
+      status,
+      paidMinor,
+      confirmedAt,
+    },
+    include: {
+      activity: { select: { id: true, title: true, feeMinor: true, startsAt: true } },
+    },
+  });
+
+  await writeAuditLog({
+    action: "ACTIVITY_STUDENT_SELF_REGISTERED",
+    resourceType: "ActivityRegistration",
+    resourceId: registration.id,
+    metadata: { activityId, status },
+    context: { ...ctx, actorUserId: userId },
+  });
+
+  return registration;
+}
+

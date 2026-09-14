@@ -1,15 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, getPrimaryRole, getDashboardPath } from "@/lib/auth-context";
-import { studentsApi, ApiError, type StudentProfile, type StudentWallet, type StudentCollection } from "@/lib/api";
+import {
+  studentsApi,
+  catalogApi,
+  ApiError,
+  type StudentProfile,
+  type StudentWallet,
+  type StudentCollection,
+  type Product,
+} from "@/lib/api";
 import { formatKES } from "@schoolmart/shared";
 import { PortalLayout } from "@/components/layout/portal-layout";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Package, Wallet, Sparkles } from "lucide-react";
+import { Package, Wallet, Sparkles, ShoppingBag } from "lucide-react";
 
 const navItems = [
   { href: "/student", label: "Home" },
@@ -30,6 +38,15 @@ type StudentActivity = {
   registration: { id: string; status: string; paidMinor: number; confirmedAt: string | null } | null;
 };
 
+type StudentRequest = {
+  id: string;
+  quantity: number;
+  note: string | null;
+  status: string;
+  createdAt: string;
+  product: { id: string; name: string; priceMinor: number; vendor: { id: string; name: string } };
+};
+
 export default function StudentPortalPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -37,6 +54,8 @@ export default function StudentPortalPage() {
   const [wallet, setWallet] = useState<StudentWallet | null>(null);
   const [collections, setCollections] = useState<StudentCollection[]>([]);
   const [activities, setActivities] = useState<StudentActivity[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [requests, setRequests] = useState<StudentRequest[]>([]);
   const [pinByOrder, setPinByOrder] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -47,23 +66,32 @@ export default function StudentPortalPage() {
     if (user && !user.roles.some((r) => r.role === "STUDENT")) router.push(getDashboardPath(getPrimaryRole(user)));
   }, [user, loading, router]);
 
-  const load = async () => {
-    const [me, w, c, a] = await Promise.all([
+  const load = useCallback(async () => {
+    const [me, w, c, a, r] = await Promise.all([
       studentsApi.me(),
       studentsApi.wallet(),
       studentsApi.collections(),
       studentsApi.activities(),
+      studentsApi.requests(),
     ]);
     setProfile(me);
     setWallet(w);
     setCollections(c.collections);
     setActivities(a.activities);
-  };
+    setRequests(r.requests);
+
+    const shop = await catalogApi.search({ schoolId: me.school.id });
+    setProducts(shop.products);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
     load().catch(() => {});
-  }, [user]);
+    const poll = setInterval(() => {
+      studentsApi.wallet().then(setWallet).catch(() => {});
+    }, 8000);
+    return () => clearInterval(poll);
+  }, [user, load]);
 
   const handleCollect = async (orderId: string) => {
     setError("");
@@ -80,6 +108,40 @@ export default function StudentPortalPage() {
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Collection failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRequest = async (productId: string) => {
+    setError("");
+    setMessage("");
+    setBusy(true);
+    try {
+      await studentsApi.createRequest({ productId, quantity: 1 });
+      setMessage("Request sent to your parent");
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Request failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRegisterActivity = async (activityId: string) => {
+    setError("");
+    setMessage("");
+    setBusy(true);
+    try {
+      const reg = await studentsApi.registerActivity(activityId);
+      setMessage(
+        reg.status === "CONFIRMED"
+          ? "Registered for activity"
+          : "Registered — waiting for parent confirmation (fee)",
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Registration failed");
     } finally {
       setBusy(false);
     }
@@ -111,7 +173,7 @@ export default function StudentPortalPage() {
           <p className="text-2xl font-bold text-brand-ink">
             {wallet ? formatKES(wallet.balanceMinor) : "—"}
           </p>
-          <p className="text-sm text-brand-muted">Wallet balance (read-only)</p>
+          <p className="text-sm text-brand-muted">Wallet balance (updates every few seconds)</p>
           {wallet && wallet.rules.length > 0 && (
             <ul className="mt-3 space-y-1 text-xs text-brand-muted">
               {wallet.rules.map((r) => (
@@ -143,20 +205,103 @@ export default function StudentPortalPage() {
 
       <Card className="mb-8">
         <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShoppingBag className="h-5 w-5 text-brand-teal" />
+            Campus shop
+          </CardTitle>
+          <CardDescription>
+            Browse approved products and request items — your parent reviews and pays from your wallet.
+          </CardDescription>
+        </CardHeader>
+        {products.length === 0 ? (
+          <p className="text-sm text-brand-muted">No products available yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {products.map((p) => (
+              <div
+                key={p.id}
+                className="flex flex-col gap-2 rounded-xl border border-gray-100 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <p className="font-medium text-brand-ink">{p.name}</p>
+                  <p className="text-xs text-brand-muted">
+                    {p.vendor?.name ?? "Vendor"} · {formatKES(p.priceMinor)}
+                  </p>
+                </div>
+                <Button type="button" variant="secondary" disabled={busy} onClick={() => handleRequest(p.id)}>
+                  Request
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        {requests.length > 0 && (
+          <div className="mt-6 border-t border-gray-100 pt-4">
+            <p className="mb-2 text-sm font-semibold text-brand-ink">Your requests</p>
+            <ul className="space-y-1 text-xs text-brand-muted">
+              {requests.slice(0, 8).map((r) => (
+                <li key={r.id}>
+                  {r.quantity}× {r.product.name} · {statusLabel(r.status)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Card>
+
+      {wallet && wallet.transactions.length > 0 && (
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Wallet activity</CardTitle>
+            <CardDescription>Recent credits and spends (read-only)</CardDescription>
+          </CardHeader>
+          <div className="space-y-2">
+            {wallet.transactions.map((tx) => (
+              <div key={tx.id} className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 text-sm">
+                <div>
+                  <p className="font-medium text-brand-ink">{tx.type.replace(/_/g, " ")}</p>
+                  <p className="text-xs text-brand-muted">
+                    {tx.description ?? "—"} · {new Date(tx.createdAt).toLocaleString()}
+                  </p>
+                </div>
+                <p className={`font-semibold ${tx.type.startsWith("CREDIT") ? "text-green-700" : "text-brand-ink"}`}>
+                  {tx.type.startsWith("CREDIT") ? "+" : "-"}
+                  {formatKES(tx.amountMinor)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <Card className="mb-8">
+        <CardHeader>
           <CardTitle>Funkies & activities</CardTitle>
-          <CardDescription>Events published by your school. Parents register and confirm fees.</CardDescription>
+          <CardDescription>
+            Free activities confirm instantly. Paid ones use your wallet when rules allow, otherwise wait for a parent.
+          </CardDescription>
         </CardHeader>
         {activities.length === 0 ? (
           <p className="text-sm text-brand-muted">No published activities yet.</p>
         ) : (
           <div className="space-y-3">
             {activities.map((a) => (
-              <div key={a.id} className="rounded-xl border border-gray-100 px-3 py-2 text-sm">
-                <p className="font-medium text-brand-ink">{a.title}</p>
-                <p className="text-xs text-brand-muted">
-                  {a.category} · {formatKES(a.feeMinor)} · {new Date(a.startsAt).toLocaleString()}
-                  {a.registration ? ` · ${statusLabel(a.registration.status)}` : " · not registered"}
-                </p>
+              <div
+                key={a.id}
+                className="flex flex-col gap-2 rounded-xl border border-gray-100 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <p className="font-medium text-brand-ink">{a.title}</p>
+                  <p className="text-xs text-brand-muted">
+                    {a.category} · {formatKES(a.feeMinor)} · {new Date(a.startsAt).toLocaleString()}
+                    {a.registration ? ` · ${statusLabel(a.registration.status)}` : ""}
+                  </p>
+                </div>
+                {!a.registration && (
+                  <Button type="button" variant="secondary" disabled={busy} onClick={() => handleRegisterActivity(a.id)}>
+                    Register
+                  </Button>
+                )}
               </div>
             ))}
           </div>

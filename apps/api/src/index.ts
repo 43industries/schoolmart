@@ -9,16 +9,21 @@ import { authRoutes, userRoutes, adminUserRoutes } from "./modules/auth/auth.rou
 import { schoolRoutes, adminSchoolRoutes } from "./modules/schools/schools.routes.js";
 import { parentRoutes } from "./modules/parents/parents.routes.js";
 import { adminRoutes } from "./modules/admin/admin.routes.js";
-import { adminMarketplaceRoutes, publicCatalogRoutes, publicVendorRoutes } from "./modules/vendors/vendors.routes.js";
 import { catalogRoutes, schoolCatalogRoutes } from "./modules/catalog/catalog.routes.js";
 import { cartRoutes } from "./modules/cart/cart.routes.js";
 import { walletRoutes } from "./modules/wallets/wallets.routes.js";
-import { publicStudentRoutes, studentPortalRoutes } from "./modules/students/students.portal.routes.js";
+import { publicStudentRoutes, studentPortalRoutes, parentStudentRequestRoutes } from "./modules/students/students.portal.routes.js";
 import {
   schoolActivityRoutes,
   parentActivityRoutes,
   studentActivityRoutes,
 } from "./modules/activities/activities.routes.js";
+import {
+  adminMarketplaceRoutes,
+  publicCatalogRoutes,
+  publicVendorRoutes,
+  vendorCatalogRoutes,
+} from "./modules/vendors/vendors.routes.js";
 
 const app = Fastify({
   logger: {
@@ -89,6 +94,7 @@ await app.register(async (v1) => {
   await v1.register(parentRoutes, { prefix: "/parents" });
   await v1.register(walletRoutes, { prefix: "/parents" });
   await v1.register(parentActivityRoutes, { prefix: "/parents" });
+  await v1.register(parentStudentRequestRoutes, { prefix: "/parents" });
   await v1.register(publicStudentRoutes, { prefix: "/students" });
   await v1.register(studentPortalRoutes, { prefix: "/students" });
   await v1.register(studentActivityRoutes, { prefix: "/students" });
@@ -96,6 +102,7 @@ await app.register(async (v1) => {
   await v1.register(catalogRoutes, { prefix: "/catalog" });
   await v1.register(publicCatalogRoutes, { prefix: "/catalog" });
   await v1.register(publicVendorRoutes, { prefix: "/vendors" });
+  await v1.register(vendorCatalogRoutes, { prefix: "/vendors" });
   await v1.register(adminSchoolRoutes, { prefix: "/admin" });
   await v1.register(adminUserRoutes, { prefix: "/admin" });
   await v1.register(adminRoutes, { prefix: "/admin" });

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { fundWalletSchema, upsertWalletRuleSchema } from "@schoolmart/shared";
+import { fundWalletSchema, upsertWalletRuleSchema, approveWalletSpendSchema } from "@schoolmart/shared";
 import { authenticate, requireParent } from "../../middleware/auth.js";
 import { auditContextFromRequest } from "../audit/audit.service.js";
 import { ValidationError } from "../../lib/errors.js";
@@ -10,11 +10,28 @@ import {
   upsertWalletRule,
   deleteWalletRule,
 } from "./wallets.service.js";
+import { listPendingSpendRequests, reviewWalletSpend } from "../cart/checkout.service.js";
 
 export async function walletRoutes(app: FastifyInstance) {
   app.get("/wallets", { preHandler: [authenticate, requireParent()] }, async (req, reply) => {
     const wallets = await listParentWallets(req.user!.sub);
     return reply.send({ wallets });
+  });
+
+  app.get("/wallets/spend-requests", { preHandler: [authenticate, requireParent()] }, async (req, reply) => {
+    const requests = await listPendingSpendRequests(req.user!.sub);
+    return reply.send({ requests });
+  });
+
+  app.post("/wallets/spend-requests/review", { preHandler: [authenticate, requireParent()] }, async (req, reply) => {
+    const parsed = approveWalletSpendSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError("Validation failed", parsed.error.flatten());
+    const result = await reviewWalletSpend(
+      req.user!.sub,
+      parsed.data,
+      auditContextFromRequest(req, req.user!.sub),
+    );
+    return reply.send(result);
   });
 
   app.get("/wallets/:studentId", { preHandler: [authenticate, requireParent()] }, async (req, reply) => {

@@ -52,6 +52,9 @@ All demo accounts use password: `Demo@SchoolMart2026`
 | Super Admin | admin@schoolmart.demo | /admin |
 | School Admin | admin@greenfield.demo | /school |
 | Parent | parent1@demo.ke | /parent |
+| Student | student.brian@demo.ke | /student |
+| Vendor (Kitchen) | vendor.kitchen@demo.ke | /vendor |
+| Vendor (Stationery) | vendor.stationery@demo.ke | /vendor |
 | Finance | finance@schoolmart.demo | /admin |
 | Support | support@schoolmart.demo | /admin |
 

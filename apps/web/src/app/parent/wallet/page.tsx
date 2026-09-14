@@ -47,6 +47,16 @@ export default function ParentWalletPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [spendRequests, setSpendRequests] = useState<
+    Array<{
+      id: string;
+      amountMinor: number;
+      category: string;
+      notes: string | null;
+      createdAt: string;
+      student: { id: string; firstName: string; lastName: string; studentNumber: string };
+    }>
+  >([]);
 
   const loadList = useCallback(async () => {
     const res = await walletsApi.list();
@@ -55,6 +65,11 @@ export default function ParentWalletPage() {
       setSelectedId(res.wallets[0].studentId);
     }
   }, [selectedId]);
+
+  const loadSpendRequests = useCallback(async () => {
+    const res = await walletsApi.spendRequests();
+    setSpendRequests(res.requests);
+  }, []);
 
   const loadDetail = useCallback(async (studentId: string) => {
     if (!studentId) {
@@ -73,16 +88,33 @@ export default function ParentWalletPage() {
   useEffect(() => {
     if (!user) return;
     loadList().catch(() => {});
-  }, [user, loadList]);
+    loadSpendRequests().catch(() => {});
+  }, [user, loadList, loadSpendRequests]);
 
   useEffect(() => {
     if (!user || !selectedId) return;
     loadDetail(selectedId).catch(() => {});
     const poll = setInterval(() => {
       loadDetail(selectedId).catch(() => {});
+      loadSpendRequests().catch(() => {});
     }, 8000);
     return () => clearInterval(poll);
-  }, [user, selectedId, loadDetail]);
+  }, [user, selectedId, loadDetail, loadSpendRequests]);
+
+  const handleReviewSpend = async (spendRequestId: string, action: "APPROVE" | "REJECT") => {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await walletsApi.reviewSpend({ spendRequestId, action });
+      setMessage(action === "APPROVE" ? "Spend approved and paid from wallet" : "Spend rejected");
+      await Promise.all([loadSpendRequests(), loadList(), selectedId ? loadDetail(selectedId) : Promise.resolve()]);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not review spend");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleFund = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,12 +190,43 @@ export default function ParentWalletPage() {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-brand-ink">Child wallets</h2>
         <p className="text-brand-muted">
-          Fund and control spending in real time. Ledger balance is the source of truth.
+          Parent-controlled funding and spending rules. Balance updates every few seconds.
         </p>
       </div>
 
       {error && <div className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       {message && <div className="mb-4 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700">{message}</div>}
+
+      {spendRequests.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Pending spend approvals</CardTitle>
+            <CardDescription>Checkouts waiting because a spending rule requires approval</CardDescription>
+          </CardHeader>
+          <div className="space-y-3">
+            {spendRequests.map((r) => (
+              <div key={r.id} className="flex flex-col gap-2 rounded-xl border border-gray-100 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium text-brand-ink">
+                    {r.student.firstName} {r.student.lastName} · {formatKES(r.amountMinor)}
+                  </p>
+                  <p className="text-xs text-brand-muted">
+                    {r.category.replace(/_/g, " ")} · {new Date(r.createdAt).toLocaleString()}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" disabled={busy} onClick={() => handleReviewSpend(r.id, "APPROVE")}>
+                    Approve
+                  </Button>
+                  <Button type="button" variant="secondary" disabled={busy} onClick={() => handleReviewSpend(r.id, "REJECT")}>
+                    Reject
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {wallets.length === 0 ? (
         <Card>
@@ -210,7 +273,7 @@ export default function ParentWalletPage() {
                   </CardDescription>
                 </CardHeader>
                 <p className="text-3xl font-bold text-brand-ink">{formatKES(detail.wallet.balanceMinor)}</p>
-                <p className="mt-1 text-xs text-brand-muted">Live balance · refreshes every few seconds</p>
+                <p className="mt-1 text-xs text-brand-muted">Live balance (updates every few seconds)</p>
               </Card>
 
               <div className="grid gap-6 lg:grid-cols-2">

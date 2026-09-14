@@ -1,6 +1,6 @@
-import { prisma, ProductStatus } from "@schoolmart/db";
+import { prisma, ProductStatus, VendorStatus } from "@schoolmart/db";
 import type { CreateProductInput, UpdateProductInput } from "@schoolmart/shared";
-import { ConflictError, NotFoundError } from "../../lib/errors.js";
+import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { writeAuditLog, type AuditContext } from "../audit/audit.service.js";
 
 export async function listProducts(filters?: { vendorId?: string; status?: ProductStatus }) {
@@ -31,6 +31,21 @@ export async function getProduct(id: string) {
   return product;
 }
 
+/** When a product goes ACTIVE, queue it for schools that already approved this vendor. */
+async function queueProductForSchoolVendors(productId: string, vendorId: string) {
+  const schoolVendors = await prisma.schoolVendor.findMany({
+    where: { vendorId, approved: true },
+    select: { schoolId: true },
+  });
+  for (const sv of schoolVendors) {
+    await prisma.schoolProduct.upsert({
+      where: { schoolId_productId: { schoolId: sv.schoolId, productId } },
+      create: { schoolId: sv.schoolId, productId, approved: false },
+      update: {},
+    });
+  }
+}
+
 export async function createProduct(input: CreateProductInput, ctx: AuditContext) {
   const vendor = await prisma.vendor.findUnique({ where: { id: input.vendorId } });
   if (!vendor) throw new NotFoundError("Vendor not found");
@@ -40,11 +55,12 @@ export async function createProduct(input: CreateProductInput, ctx: AuditContext
   });
   if (existing) throw new ConflictError("Product slug already exists for this vendor");
 
-  const { availableQty, lowStockThreshold, ...productData } = input;
+  const { availableQty, lowStockThreshold, images, ...productData } = input;
 
   const product = await prisma.product.create({
     data: {
       ...productData,
+      images: images ?? [],
       inventory: {
         create: {
           availableQty: availableQty ?? 0,
@@ -54,6 +70,10 @@ export async function createProduct(input: CreateProductInput, ctx: AuditContext
     },
     include: { inventory: true, vendor: { select: { id: true, name: true } }, category: true },
   });
+
+  if (product.status === ProductStatus.ACTIVE && vendor.status === VendorStatus.APPROVED) {
+    await queueProductForSchoolVendors(product.id, product.vendorId);
+  }
 
   await writeAuditLog({
     action: "PRODUCT_CREATED",
@@ -70,12 +90,15 @@ export async function updateProduct(id: string, input: UpdateProductInput, ctx: 
   const existing = await prisma.product.findUnique({ where: { id } });
   if (!existing) throw new NotFoundError("Product not found");
 
-  const { availableQty, lowStockThreshold, ...productData } = input;
+  const { availableQty, lowStockThreshold, images, ...productData } = input;
 
   const product = await prisma.$transaction(async (tx) => {
     await tx.product.update({
       where: { id },
-      data: productData,
+      data: {
+        ...productData,
+        ...(images !== undefined ? { images } : {}),
+      },
     });
 
     if (availableQty !== undefined || lowStockThreshold !== undefined) {
@@ -95,9 +118,16 @@ export async function updateProduct(id: string, input: UpdateProductInput, ctx: 
 
     return tx.product.findUniqueOrThrow({
       where: { id },
-      include: { inventory: true, vendor: { select: { id: true, name: true } }, category: true },
+      include: { inventory: true, vendor: { select: { id: true, name: true, status: true } }, category: true },
     });
   });
+
+  const becameActive =
+    product.status === ProductStatus.ACTIVE &&
+    (existing.status !== ProductStatus.ACTIVE || input.status === ProductStatus.ACTIVE);
+  if (becameActive && product.vendor.status === VendorStatus.APPROVED) {
+    await queueProductForSchoolVendors(product.id, product.vendorId);
+  }
 
   await writeAuditLog({
     action: "PRODUCT_UPDATED",
@@ -107,5 +137,12 @@ export async function updateProduct(id: string, input: UpdateProductInput, ctx: 
     context: ctx,
   });
 
+  return product;
+}
+
+export async function assertVendorOwnsProduct(vendorId: string, productId: string) {
+  const product = await prisma.product.findUnique({ where: { id: productId } });
+  if (!product) throw new NotFoundError("Product not found");
+  if (product.vendorId !== vendorId) throw new ForbiddenError("Not your product");
   return product;
 }

@@ -5,22 +5,44 @@ import {
   searchSchoolCatalog,
   listSchoolVendors,
   listSchoolProducts,
+  listAvailableVendorsForSchool,
   approveSchoolVendor,
   approveSchoolProduct,
 } from "./catalog.service.js";
-import { authenticate, requireParent, requireSchoolAdmin } from "../../middleware/auth.js";
+import { authenticate, requireSchoolAdmin } from "../../middleware/auth.js";
 import { auditContextFromRequest } from "../audit/audit.service.js";
-import { ValidationError } from "../../lib/errors.js";
+import { ForbiddenError, ValidationError } from "../../lib/errors.js";
 import { getProduct } from "../products/products.service.js";
+import { prisma, Role } from "@schoolmart/db";
 
 export async function catalogRoutes(app: FastifyInstance) {
-  app.get("/search", { preHandler: [authenticate, requireParent()] }, async (req, reply) => {
+  app.get("/search", { preHandler: [authenticate] }, async (req, reply) => {
     const parsed = catalogSearchSchema.safeParse(req.query);
     if (!parsed.success) throw new ValidationError("Validation failed", parsed.error.flatten());
+
+    const isParent = req.user!.roles.some((r) => r.role === Role.PARENT);
+    const isStudent = req.user!.roles.some((r) => r.role === Role.STUDENT);
+    if (!isParent && !isStudent) {
+      throw new ForbiddenError("Parent or student access required");
+    }
+
+    if (isStudent) {
+      const student = await prisma.student.findUnique({ where: { userId: req.user!.sub } });
+      if (!student) throw new ForbiddenError("Student profile not found");
+      if (parsed.data.schoolId !== student.schoolId) {
+        throw new ForbiddenError("You can only browse your school catalog");
+      }
+    }
+
     return reply.send(await searchSchoolCatalog(parsed.data));
   });
 
-  app.get("/products/:id", { preHandler: [authenticate, requireParent()] }, async (req, reply) => {
+  app.get("/products/:id", { preHandler: [authenticate] }, async (req, reply) => {
+    const isParent = req.user!.roles.some((r) => r.role === Role.PARENT);
+    const isStudent = req.user!.roles.some((r) => r.role === Role.STUDENT);
+    if (!isParent && !isStudent) {
+      throw new ForbiddenError("Parent or student access required");
+    }
     const { id } = req.params as { id: string };
     return reply.send(await getProduct(id));
   });
@@ -32,6 +54,13 @@ export async function schoolCatalogRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const { id } = req.params as { id: string };
     return reply.send({ vendors: await listSchoolVendors(id) });
+  });
+
+  app.get("/:id/catalog/vendors/available", {
+    preHandler: [authenticate, requireSchoolAdmin("id")],
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    return reply.send({ vendors: await listAvailableVendorsForSchool(id) });
   });
 
   app.get("/:id/catalog/products", {
@@ -71,3 +100,4 @@ export async function schoolCatalogRoutes(app: FastifyInstance) {
     return reply.send(link);
   });
 }
+

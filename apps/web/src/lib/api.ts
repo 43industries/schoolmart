@@ -240,6 +240,20 @@ export const walletsApi = {
   }) => api<{ id: string }>("/parents/wallets/rules", { method: "PUT", body: data }),
   deleteRule: (ruleId: string) =>
     api<{ success: boolean }>(`/parents/wallets/rules/${ruleId}`, { method: "DELETE" }),
+  spendRequests: () =>
+    api<{
+      requests: Array<{
+        id: string;
+        amountMinor: number;
+        category: string;
+        status: string;
+        notes: string | null;
+        createdAt: string;
+        student: { id: string; firstName: string; lastName: string; studentNumber: string };
+      }>;
+    }>("/parents/wallets/spend-requests"),
+  reviewSpend: (data: { spendRequestId: string; action: "APPROVE" | "REJECT" }) =>
+    api<unknown>("/parents/wallets/spend-requests/review", { method: "POST", body: data }),
 };
 
 export const adminApi = {
@@ -324,6 +338,14 @@ export const cartApi = {
     api<CartResponse>("/cart/items", { method: "POST", body: data }),
   updateItem: (itemId: string, quantity: number) =>
     api<CartResponse>(`/cart/items/${itemId}`, { method: "PATCH", body: { quantity } }),
+  checkout: (data: { studentId: string; schoolId: string; notes?: string }) =>
+    api<{
+      status: "PAID" | "PENDING_APPROVAL";
+      order?: { id: string; orderNumber: string; totalMinor: number; status: string };
+      spendRequestId?: string;
+      amountMinor?: number;
+      message?: string;
+    }>("/cart/checkout", { method: "POST", body: data }),
 };
 
 export const schoolAdminApi = {
@@ -334,6 +356,8 @@ export const schoolAdminApi = {
   rejectLink: (schoolId: string, linkId: string, reason?: string) =>
     api(`/schools/${schoolId}/parent-links/${linkId}/reject`, { method: "POST", body: { reason } }),
   catalogVendors: (schoolId: string) => api<{ vendors: unknown[] }>(`/schools/${schoolId}/catalog/vendors`),
+  availableVendors: (schoolId: string) =>
+    api<{ vendors: Vendor[] }>(`/schools/${schoolId}/catalog/vendors/available`),
   catalogProducts: (schoolId: string) => api<{ products: unknown[] }>(`/schools/${schoolId}/catalog/products`),
   approveVendor: (schoolId: string, vendorId: string, approved: boolean) =>
     api(`/schools/${schoolId}/catalog/vendors/${vendorId}`, { method: "POST", body: { approved } }),
@@ -344,6 +368,15 @@ export const schoolAdminApi = {
     api(`/schools/${schoolId}/activities`, { method: "POST", body: data }),
   updateActivity: (schoolId: string, activityId: string, data: Record<string, unknown>) =>
     api(`/schools/${schoolId}/activities/${activityId}`, { method: "PATCH", body: data }),
+};
+
+export const vendorApi = {
+  me: () => api<Vendor & { status: string; description?: string | null }>("/vendors/me"),
+  products: () => api<{ products: Product[] }>("/vendors/me/products"),
+  createProduct: (data: Record<string, unknown>) =>
+    api<Product>("/vendors/me/products", { method: "POST", body: data }),
+  updateProduct: (id: string, data: Record<string, unknown>) =>
+    api<Product>(`/vendors/me/products/${id}`, { method: "PATCH", body: data }),
 };
 
 export interface StudentProfile {
@@ -428,6 +461,47 @@ export const studentsApi = {
         registration: { id: string; status: string; paidMinor: number; confirmedAt: string | null } | null;
       }>;
     }>("/students/me/activities"),
+  registerActivity: (activityId: string) =>
+    api<{ id: string; status: string }>(`/students/me/activities/${activityId}/register`, {
+      method: "POST",
+    }),
+  requests: () =>
+    api<{
+      requests: Array<{
+        id: string;
+        quantity: number;
+        note: string | null;
+        status: string;
+        createdAt: string;
+        product: { id: string; name: string; priceMinor: number; vendor: { id: string; name: string } };
+      }>;
+    }>("/students/me/requests"),
+  createRequest: (data: { productId: string; quantity?: number; note?: string }) =>
+    api<{ id: string; status: string }>("/students/me/requests", { method: "POST", body: data }),
+};
+
+export const parentRequestsApi = {
+  list: () =>
+    api<{
+      requests: Array<{
+        id: string;
+        quantity: number;
+        note: string | null;
+        status: string;
+        createdAt: string;
+        student: {
+          id: string;
+          firstName: string;
+          lastName: string;
+          studentNumber: string;
+          schoolId: string;
+          school: { id: string; name: string };
+        };
+        product: { id: string; name: string; priceMinor: number; vendor: { id: string; name: string } };
+      }>;
+    }>("/parents/requests"),
+  review: (data: { requestId: string; action: "APPROVE" | "REJECT" }) =>
+    api<{ id: string; status: string }>("/parents/requests/review", { method: "POST", body: data }),
 };
 
 export interface ParentActivitiesResponse {

@@ -1,45 +1,308 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, getPrimaryRole, getDashboardPath } from "@/lib/auth-context";
+import { vendorApi, catalogApi, ApiError, type Product, type Category } from "@/lib/api";
 import { PortalLayout } from "@/components/layout/portal-layout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input, Select } from "@/components/ui/input";
+import { formatKES, toMinorUnits } from "@schoolmart/shared";
 
 const navItems = [
-  { href: "/vendor", label: "Dashboard" },
+  { href: "/vendor", label: "Catalog" },
 ];
+
+function slugify(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
+}
 
 export default function VendorDashboardPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [vendorStatus, setVendorStatus] = useState<string>("");
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    name: "",
+    slug: "",
+    description: "",
+    priceKes: "",
+    categoryId: "",
+    availableQty: "10",
+    status: "DRAFT",
+    imageUrl: "",
+  });
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
     if (user && !user.roles.some((r) => r.role === "VENDOR")) router.push(getDashboardPath(getPrimaryRole(user)));
   }, [user, loading, router]);
 
+  const load = async () => {
+    const [me, prods, cats] = await Promise.all([
+      vendorApi.me(),
+      vendorApi.products(),
+      catalogApi.categories(),
+    ]);
+    setVendorStatus(me.status);
+    setProducts(prods.products);
+    setCategories(cats.categories);
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    load().catch(() => {});
+  }, [user]);
+
+  const resetForm = () => {
+    setForm({
+      name: "",
+      slug: "",
+      description: "",
+      priceKes: "",
+      categoryId: "",
+      availableQty: "10",
+      status: "DRAFT",
+      imageUrl: "",
+    });
+    setEditingId(null);
+    setShowForm(false);
+  };
+
+  const startEdit = (p: Product) => {
+    setEditingId(p.id);
+    setShowForm(true);
+    setForm({
+      name: p.name,
+      slug: p.slug,
+      description: p.description ?? "",
+      priceKes: String(p.priceMinor / 100),
+      categoryId: p.category?.id ?? "",
+      availableQty: String(p.inventory?.availableQty ?? 0),
+      status: p.status,
+      imageUrl: "",
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setMessage("");
+    setBusy(true);
+    try {
+      const priceKes = Number(form.priceKes);
+      if (!Number.isFinite(priceKes) || priceKes <= 0) {
+        setError("Enter a valid price");
+        return;
+      }
+      const payload: Record<string, unknown> = {
+        name: form.name.trim(),
+        slug: (form.slug || slugify(form.name)).trim(),
+        description: form.description.trim() || undefined,
+        priceMinor: toMinorUnits(priceKes),
+        status: form.status,
+        availableQty: Number(form.availableQty) || 0,
+        categoryId: form.categoryId || undefined,
+      };
+      if (form.imageUrl.trim()) {
+        payload.images = [form.imageUrl.trim()];
+      } else if (!editingId) {
+        payload.images = [];
+      }
+      if (editingId) {
+        await vendorApi.updateProduct(editingId, payload);
+        setMessage("Product updated");
+      } else {
+        await vendorApi.createProduct(payload);
+        setMessage("Product posted");
+      }
+      resetForm();
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleActive = async (p: Product) => {
+    setError("");
+    try {
+      const next = p.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+      await vendorApi.updateProduct(p.id, { status: next });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Update failed");
+    }
+  };
+
   if (loading || !user) return null;
 
   return (
     <PortalLayout title="Vendor Portal" navItems={navItems}>
       <div className="mb-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-bold text-brand-ink">Welcome, {user.firstName}</h2>
+        <h2 className="text-2xl font-bold text-brand-ink">Your catalog</h2>
         <p className="mt-1 text-brand-muted">
-          Vendors aggregate and deliver. Parents order, pay and track. Students collect securely.
+          Post products like a delivery marketplace. Schools approve what parents and students can order.
+          {vendorStatus ? ` · Status: ${vendorStatus}` : ""}
         </p>
       </div>
-      <Card>
-        <h3 className="font-semibold text-brand-ink">Catalog &amp; fulfilment</h3>
-        <p className="mt-2 text-sm text-brand-muted">
-          Product management and order fulfilment tools expand in upcoming releases. If your application is still
-          pending, an admin must approve your vendor before you go live.
-        </p>
-        <div className="mt-6">
-          <Button href="/vendors">View vendors homepage</Button>
-        </div>
-      </Card>
+
+      {error && <div className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {message && <div className="mb-4 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700">{message}</div>}
+
+      {vendorStatus && vendorStatus !== "APPROVED" && (
+        <Card className="mb-6 border-amber-200 bg-amber-50">
+          <p className="text-sm text-amber-900">
+            Your vendor account is {vendorStatus.toLowerCase()}. An admin must approve you before products go live.
+          </p>
+        </Card>
+      )}
+
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <h3 className="font-semibold text-brand-ink">Products ({products.length})</h3>
+        <Button
+          type="button"
+          onClick={() => {
+            resetForm();
+            setShowForm(true);
+          }}
+        >
+          Add product
+        </Button>
+      </div>
+
+      {showForm && (
+        <Card className="mb-8">
+          <h3 className="mb-4 font-semibold text-brand-ink">{editingId ? "Edit product" : "New product"}</h3>
+          <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label="Name"
+              required
+              value={form.name}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  name: e.target.value,
+                  slug: editingId ? form.slug : slugify(e.target.value),
+                })
+              }
+            />
+            <Input
+              label="Slug"
+              required
+              value={form.slug}
+              onChange={(e) => setForm({ ...form, slug: e.target.value })}
+            />
+            <Input
+              label="Price (KES)"
+              required
+              type="number"
+              min="1"
+              step="1"
+              value={form.priceKes}
+              onChange={(e) => setForm({ ...form, priceKes: e.target.value })}
+            />
+            <Input
+              label="Stock qty"
+              type="number"
+              min="0"
+              value={form.availableQty}
+              onChange={(e) => setForm({ ...form, availableQty: e.target.value })}
+            />
+            <Select
+              label="Category"
+              options={[
+                { value: "", label: "None" },
+                ...categories.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+              value={form.categoryId}
+              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+            />
+            <Select
+              label="Status"
+              options={[
+                { value: "DRAFT", label: "Draft" },
+                { value: "ACTIVE", label: "Active (publish)" },
+                { value: "INACTIVE", label: "Inactive" },
+              ]}
+              value={form.status}
+              onChange={(e) => setForm({ ...form, status: e.target.value })}
+            />
+            <div className="sm:col-span-2">
+              <Input
+                label="Description"
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Input
+                label="Image URL (optional)"
+                type="url"
+                placeholder="https://…"
+                value={form.imageUrl}
+                onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+              />
+            </div>
+            <div className="flex gap-3 sm:col-span-2">
+              <Button type="submit" disabled={busy}>
+                {busy ? "Saving…" : editingId ? "Save changes" : "Post product"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={resetForm}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Card>
+      )}
+
+      <div className="space-y-3">
+        {products.map((p) => (
+          <Card key={p.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-brand-ink">{p.name}</p>
+              <p className="text-sm text-brand-muted">
+                {formatKES(p.priceMinor)} · stock {p.inventory?.availableQty ?? 0}
+                {p.category ? ` · ${p.category.name}` : ""}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                  p.status === "ACTIVE"
+                    ? "bg-green-100 text-green-700"
+                    : p.status === "DRAFT"
+                      ? "bg-yellow-100 text-yellow-700"
+                      : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                {p.status}
+              </span>
+              <Button type="button" variant="secondary" onClick={() => startEdit(p)}>
+                Edit
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => toggleActive(p)}>
+                {p.status === "ACTIVE" ? "Unpublish" : "Publish"}
+              </Button>
+            </div>
+          </Card>
+        ))}
+        {products.length === 0 && (
+          <p className="text-sm text-brand-muted">No products yet. Add your first listing above.</p>
+        )}
+      </div>
     </PortalLayout>
   );
 }

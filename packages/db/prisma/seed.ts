@@ -259,6 +259,51 @@ async function main() {
   }
   console.log(`✓ Parent-student links: 6 active, 2 pending approval`);
 
+  // Demo activated student login (Brian Kamau — GF-2024-001)
+  const brianStudent = students[0]!;
+  const studentUser = await prisma.user.upsert({
+    where: { email: "student.brian@demo.ke" },
+    update: {
+      passwordHash,
+      status: UserStatus.ACTIVE,
+      firstName: brianStudent.firstName,
+      lastName: brianStudent.lastName,
+    },
+    create: {
+      email: "student.brian@demo.ke",
+      phoneE164: "+254712345020",
+      passwordHash,
+      firstName: brianStudent.firstName,
+      lastName: brianStudent.lastName,
+      status: UserStatus.ACTIVE,
+      emailVerifiedAt: new Date(),
+      phoneVerifiedAt: new Date(),
+    },
+  });
+  const studentRole = await prisma.userRole.findFirst({
+    where: { userId: studentUser.id, role: Role.STUDENT },
+  });
+  if (!studentRole) {
+    await prisma.userRole.create({
+      data: {
+        userId: studentUser.id,
+        role: Role.STUDENT,
+        scopeType: ScopeType.SCHOOL,
+        scopeId: brianStudent.schoolId,
+      },
+    });
+  }
+  await prisma.student.update({
+    where: { id: brianStudent.id },
+    data: { userId: studentUser.id },
+  });
+  await prisma.wallet.upsert({
+    where: { studentId: brianStudent.id },
+    create: { studentId: brianStudent.id, balanceMinor: 500000, currency: "KES" },
+    update: {},
+  });
+  console.log(`✓ Student login: student.brian@demo.ke (GF-2024-001)`);
+
   // Marketplace seed
   const meals = await prisma.category.upsert({
     where: { slug: "meals" },
@@ -277,29 +322,101 @@ async function main() {
   });
   console.log(`✓ Categories: meals, school-supplies, care-packages`);
 
+  // Vendor owner accounts (can log in at /login → /vendor)
+  const kitchenOwner = await prisma.user.upsert({
+    where: { email: "vendor.kitchen@demo.ke" },
+    update: {},
+    create: {
+      email: "vendor.kitchen@demo.ke",
+      phoneE164: "+254712345010",
+      passwordHash,
+      firstName: "[DEMO] Amina",
+      lastName: "Kitchen",
+      status: UserStatus.ACTIVE,
+      emailVerifiedAt: new Date(),
+      phoneVerifiedAt: new Date(),
+    },
+  });
+  const stationeryOwner = await prisma.user.upsert({
+    where: { email: "vendor.stationery@demo.ke" },
+    update: {},
+    create: {
+      email: "vendor.stationery@demo.ke",
+      phoneE164: "+254712345011",
+      passwordHash,
+      firstName: "[DEMO] Brian",
+      lastName: "Stationery",
+      status: UserStatus.ACTIVE,
+      emailVerifiedAt: new Date(),
+      phoneVerifiedAt: new Date(),
+    },
+  });
+
   const kitchen = await prisma.vendor.upsert({
     where: { slug: "demo-campus-kitchen" },
-    update: {},
+    update: {
+      ownerUserId: kitchenOwner.id,
+      contactEmail: "vendor.kitchen@demo.ke",
+      status: VendorStatus.APPROVED,
+    },
     create: {
       name: "[DEMO] Campus Kitchen",
       slug: "demo-campus-kitchen",
       description: "School-approved meal vendor",
-      contactEmail: "kitchen@demo.ke",
+      contactEmail: "vendor.kitchen@demo.ke",
+      contactPhone: "+254712345010",
+      ownerUserId: kitchenOwner.id,
+      county: "Nairobi",
+      town: "Westlands",
+      sellCategories: ["MEALS_SNACKS"],
       status: VendorStatus.APPROVED,
     },
   });
   const stationery = await prisma.vendor.upsert({
     where: { slug: "demo-stationery-hub" },
-    update: {},
+    update: {
+      ownerUserId: stationeryOwner.id,
+      contactEmail: "vendor.stationery@demo.ke",
+      status: VendorStatus.APPROVED,
+    },
     create: {
       name: "[DEMO] Stationery Hub",
       slug: "demo-stationery-hub",
       description: "Exercise books, pens, and supplies",
-      contactEmail: "stationery@demo.ke",
+      contactEmail: "vendor.stationery@demo.ke",
+      contactPhone: "+254712345011",
+      ownerUserId: stationeryOwner.id,
+      county: "Nairobi",
+      town: "CBD",
+      sellCategories: ["SCHOOL_SUPPLIES", "EXAM_ESSENTIALS"],
       status: VendorStatus.APPROVED,
     },
   });
-  console.log(`✓ Vendors: Campus Kitchen, Stationery Hub`);
+
+  async function ensureVendorRole(userId: string, vendorId: string) {
+    const existing = await prisma.userRole.findFirst({
+      where: { userId, role: Role.VENDOR },
+    });
+    if (existing) {
+      await prisma.userRole.update({
+        where: { id: existing.id },
+        data: { scopeType: ScopeType.VENDOR, scopeId: vendorId },
+      });
+    } else {
+      await prisma.userRole.create({
+        data: {
+          userId,
+          role: Role.VENDOR,
+          scopeType: ScopeType.VENDOR,
+          scopeId: vendorId,
+        },
+      });
+    }
+  }
+
+  await ensureVendorRole(kitchenOwner.id, kitchen.id);
+  await ensureVendorRole(stationeryOwner.id, stationery.id);
+  console.log(`✓ Vendors: Campus Kitchen (vendor.kitchen@demo.ke), Stationery Hub (vendor.stationery@demo.ke)`);
 
   async function upsertProduct(data: {
     vendorId: string;
@@ -391,6 +508,9 @@ async function main() {
   console.log(`  Super Admin:  admin@schoolmart.demo`);
   console.log(`  School Admin: admin@greenfield.demo`);
   console.log(`  Parent:       parent1@demo.ke`);
+  console.log(`  Student:      student.brian@demo.ke`);
+  console.log(`  Vendor:       vendor.kitchen@demo.ke`);
+  console.log(`  Vendor:       vendor.stationery@demo.ke`);
 }
 
 main()

@@ -64,6 +64,25 @@ export function requireStudent() {
   return requireRole(Role.STUDENT);
 }
 
+export function requireVendor() {
+  return async (req: FastifyRequest, _reply: FastifyReply) => {
+    if (!req.user) throw new UnauthorizedError();
+    const isSuperAdmin = req.user.roles.some((r) => r.role === Role.SUPER_ADMIN);
+    if (isSuperAdmin) return;
+    const hasVendor = req.user.roles.some(
+      (r) => r.role === Role.VENDOR && r.scopeType === ScopeType.VENDOR && !!r.scopeId,
+    );
+    if (!hasVendor) throw new ForbiddenError("Vendor access required");
+  };
+}
+
+export function getVendorIdFromUser(user: TokenPayload): string | null {
+  const role = user.roles.find(
+    (r) => r.role === Role.VENDOR && r.scopeType === ScopeType.VENDOR && r.scopeId,
+  );
+  return role?.scopeId ?? null;
+}
+
 export function requireSuperAdmin() {
   return requireRole(Role.SUPER_ADMIN);
 }

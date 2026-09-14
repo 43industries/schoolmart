@@ -6,14 +6,28 @@ import {
   createCategorySchema,
   createProductSchema,
   updateProductSchema,
+  vendorCreateProductSchema,
+  vendorUpdateProductSchema,
 } from "@schoolmart/shared";
 import { listVendors, getVendor, createVendor, updateVendor, registerVendor } from "./vendors.service.js";
 import { listCategories, createCategory } from "../categories/categories.service.js";
-import { listProducts, getProduct, createProduct, updateProduct } from "../products/products.service.js";
-import { authenticate, requireSuperAdmin } from "../../middleware/auth.js";
+import {
+  listProducts,
+  getProduct,
+  createProduct,
+  updateProduct,
+  assertVendorOwnsProduct,
+} from "../products/products.service.js";
+import {
+  authenticate,
+  requireSuperAdmin,
+  requireVendor,
+  getVendorIdFromUser,
+} from "../../middleware/auth.js";
 import { auditContextFromRequest } from "../audit/audit.service.js";
-import { ValidationError } from "../../lib/errors.js";
-import { VendorStatus, ProductStatus } from "@schoolmart/db";
+import { ForbiddenError, ValidationError } from "../../lib/errors.js";
+import { VendorStatus, ProductStatus, prisma } from "@schoolmart/db";
+import type { TokenPayload } from "../auth/auth.service.js";
 
 export async function publicVendorRoutes(app: FastifyInstance) {
   app.post("/register", async (req, reply) => {
@@ -25,6 +39,60 @@ export async function publicVendorRoutes(app: FastifyInstance) {
       ...result,
       message: "Vendor application submitted. Log in after approval to manage your catalog.",
     });
+  });
+}
+
+function resolveVendorId(user: TokenPayload) {
+  const fromJwt = getVendorIdFromUser(user);
+  if (fromJwt) return fromJwt;
+  throw new ForbiddenError("Vendor scope missing");
+}
+
+export async function vendorCatalogRoutes(app: FastifyInstance) {
+  app.get("/me", { preHandler: [authenticate, requireVendor()] }, async (req, reply) => {
+    const vendorId = resolveVendorId(req.user!);
+    const vendor = await prisma.vendor.findUnique({
+      where: { id: vendorId },
+      include: { _count: { select: { products: true } } },
+    });
+    if (!vendor) throw new ForbiddenError("Vendor not found");
+    return reply.send(vendor);
+  });
+
+  app.get("/me/products", { preHandler: [authenticate, requireVendor()] }, async (req, reply) => {
+    const vendorId = resolveVendorId(req.user!);
+    const products = await listProducts({ vendorId });
+    return reply.send({ products });
+  });
+
+  app.post("/me/products", { preHandler: [authenticate, requireVendor()] }, async (req, reply) => {
+    const vendorId = resolveVendorId(req.user!);
+    const vendor = await prisma.vendor.findUnique({ where: { id: vendorId } });
+    if (!vendor) throw new ForbiddenError("Vendor not found");
+    if (vendor.status !== VendorStatus.APPROVED) {
+      throw new ForbiddenError("Vendor must be approved before posting products");
+    }
+
+    const parsed = vendorCreateProductSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError("Validation failed", parsed.error.flatten());
+
+    const product = await createProduct(
+      { ...parsed.data, vendorId },
+      auditContextFromRequest(req, req.user!.sub),
+    );
+    return reply.status(201).send(product);
+  });
+
+  app.patch("/me/products/:id", { preHandler: [authenticate, requireVendor()] }, async (req, reply) => {
+    const vendorId = resolveVendorId(req.user!);
+    const { id } = req.params as { id: string };
+    await assertVendorOwnsProduct(vendorId, id);
+
+    const parsed = vendorUpdateProductSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError("Validation failed", parsed.error.flatten());
+
+    const product = await updateProduct(id, parsed.data, auditContextFromRequest(req, req.user!.sub));
+    return reply.send(product);
   });
 }
 

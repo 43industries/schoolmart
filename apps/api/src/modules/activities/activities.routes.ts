@@ -16,6 +16,7 @@ import {
   registerForActivity,
   confirmActivityRegistration,
   listStudentActivities,
+  studentSelfRegisterActivity,
 } from "./activities.service.js";
 
 export async function schoolActivityRoutes(app: FastifyInstance) {
@@ -95,5 +96,17 @@ export async function studentActivityRoutes(app: FastifyInstance) {
   app.get("/me/activities", { preHandler: [authenticate, requireStudent()] }, async (req, reply) => {
     const activities = await listStudentActivities(req.user!.sub);
     return reply.send({ activities });
+  });
+
+  app.post("/me/activities/:activityId/register", {
+    preHandler: [authenticate, requireStudent()],
+  }, async (req, reply) => {
+    const { activityId } = req.params as { activityId: string };
+    const registration = await studentSelfRegisterActivity(
+      req.user!.sub,
+      activityId,
+      auditContextFromRequest(req, req.user!.sub),
+    );
+    return reply.status(201).send(registration);
   });
 }
