@@ -30,8 +30,9 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await login(identifier, password);
-      router.push("/");
+      const profile = await login(identifier, password);
+      const role = getPrimaryRole(profile);
+      router.push(getDashboardPath(role));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed");
     } finally {

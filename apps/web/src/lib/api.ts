@@ -1,4 +1,5 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+const ACCESS_TOKEN_KEY = "schoolmart_access_token";
 
 export class ApiError extends Error {
   constructor(
@@ -12,18 +13,31 @@ export class ApiError extends Error {
   }
 }
 
+export function getAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return sessionStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+export function setAccessToken(token: string | null) {
+  if (typeof window === "undefined") return;
+  if (token) sessionStorage.setItem(ACCESS_TOKEN_KEY, token);
+  else sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+}
+
 interface RequestOptions extends Omit<RequestInit, "body"> {
   body?: unknown;
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, ...rest } = options;
+  const token = getAccessToken();
 
   const res = await fetch(`${API_URL}${path}`, {
     ...rest,
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -100,7 +114,11 @@ export const authApi = {
     api<{ success: boolean; userId: string; linkId: string }>("/auth/register", { method: "POST", body: data }),
 
   login: (data: { identifier: string; password: string }) =>
-    api<{ accessToken: string; user: { sub: string; roles: UserProfile["roles"] } }>("/auth/login", { method: "POST", body: data }),
+    api<{
+      accessToken: string;
+      refreshToken: string;
+      user: { sub: string; roles: UserProfile["roles"] };
+    }>("/auth/login", { method: "POST", body: data }),
 
   logout: () => api<{ success: boolean }>("/auth/logout", { method: "POST" }),
 

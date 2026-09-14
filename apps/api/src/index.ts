@@ -26,7 +26,14 @@ const app = Fastify({
 
 await app.register(helmet, { contentSecurityPolicy: false });
 await app.register(cors, {
-  origin: [config.webUrl, "http://localhost:3000"],
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    const allowed = [config.webUrl, "http://localhost:3000", "http://127.0.0.1:3000"];
+    if (allowed.includes(origin) || (config.isDev && /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+):\d+$/.test(origin))) {
+      return cb(null, true);
+    }
+    return cb(null, false);
+  },
   credentials: true,
 });
 await app.register(cookie, { secret: config.cookieSecret });

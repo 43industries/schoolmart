@@ -1,12 +1,12 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
-import { authApi, type UserProfile } from "@/lib/api";
+import { authApi, setAccessToken, type UserProfile } from "@/lib/api";
 
 interface AuthContextValue {
   user: UserProfile | null;
   loading: boolean;
-  login: (identifier: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<UserProfile>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -22,6 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const profile = await authApi.me();
       setUser(profile);
     } catch {
+      setAccessToken(null);
       setUser(null);
     } finally {
       setLoading(false);
@@ -33,12 +34,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const login = async (identifier: string, password: string) => {
-    await authApi.login({ identifier, password });
-    await refresh();
+    const result = await authApi.login({ identifier: identifier.trim(), password });
+    setAccessToken(result.accessToken);
+    const profile = await authApi.me();
+    setUser(profile);
+    setLoading(false);
+    return profile;
   };
 
   const logout = async () => {
-    await authApi.logout();
+    try {
+      await authApi.logout();
+    } catch {
+      // still clear local session
+    }
+    setAccessToken(null);
     setUser(null);
   };
 
