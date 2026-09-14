@@ -98,9 +98,41 @@ schoolmart/
 
 ## Deploy
 
-Recommended split: **Vercel (web)** + **Railway (API + Postgres)**.
+Recommended split: **Vercel (web)** + **Render or Railway (API + Postgres)**.
 
-### 1. Railway — API + Postgres
+> **Laptop Chrome vs Cursor:** Cursor uses `http://localhost:3000` → local API `:4000`. The Vercel site must call your **public** API (Render/Railway), never `localhost`. Browsers block public HTTPS pages from calling loopback. After changing `NEXT_PUBLIC_API_URL`, **redeploy** Vercel (the value is baked in at build time).
+
+### 1a. Render — API + Postgres (current production)
+
+1. [Render](https://render.com) → New **Web Service** from GitHub `43industries/schoolmart`.
+2. Add a **PostgreSQL** database and copy its `DATABASE_URL` into the web service.
+3. Service settings (monorepo **root**, not `apps/api`):
+
+| Setting | Value |
+|---------|--------|
+| Root Directory | *(empty / repo root)* |
+| Build Command | `pnpm install && pnpm build:api` |
+| Start Command | `pnpm start:api` |
+| Node | **20+** |
+| Health Check Path | `/health` |
+
+4. Environment variables:
+
+| Variable | Value |
+|----------|--------|
+| `DATABASE_URL` | From Render Postgres |
+| `NODE_ENV` | `production` |
+| `JWT_SECRET` | Long random string |
+| `COOKIE_SECRET` | Long random string |
+| `WEB_URL` | Your Vercel origin, e.g. `https://schoolmart-api.vercel.app` |
+| `DEMO_PASSWORD` | Only if you seed demo accounts |
+
+5. Deploy. Check `https://<your-service>.onrender.com/health` → `{"status":"ok",...}`.
+6. Optional seed against the Render DB: `pnpm db:seed` (from a machine with `DATABASE_URL` set).
+
+Copy the public API base for Vercel: `https://<your-service>.onrender.com/api/v1`.
+
+### 1b. Railway — API + Postgres (alternative)
 
 1. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub** → select `43industries/schoolmart`.
 2. Add a **PostgreSQL** plugin to the project.
@@ -131,17 +163,27 @@ Copy the Railway public API URL, e.g. `https://schoolmart-api-production.up.rail
 
 1. Import the same GitHub repo into [Vercel](https://vercel.com).
 2. Set **Root Directory** to `apps/web` and **include files outside the root directory**.
-3. Env:
+3. Env (Production — and Preview if you use preview URLs):
 
 | Variable | Value |
 |----------|--------|
-| `NEXT_PUBLIC_API_URL` | `https://<your-railway-api>/api/v1` |
+| `NEXT_PUBLIC_API_URL` | `https://<your-render-or-railway-api>/api/v1` |
 
-4. Deploy. Then set Railway `WEB_URL` to the Vercel URL if you hadn’t already, and redeploy the API so CORS matches.
+**Must not** be `http://localhost:4000/...`. Vercel builds now **fail** if this is missing or points at localhost.
+
+4. **Redeploy** after setting or changing the env var.
+5. Set the API host’s `WEB_URL` to the Vercel origin and redeploy the API so CORS matches.
 
 ### Cross-origin auth
 
-Production cookies use `SameSite=None; Secure` so login works when the web app (Vercel) and API (Railway) are on different domains. The browser frontend must keep calling the API with `credentials: "include"` (already configured).
+Production cookies use `SameSite=None; Secure` so login works when the web app (Vercel) and API (Render/Railway) are on different domains. The browser frontend must keep calling the API with `credentials: "include"` (already configured).
+
+### Login checklist if Chrome fails but Cursor works
+
+1. Confirm you are on the **Vercel** URL in Chrome (not only Cursor’s localhost).
+2. DevTools → Network → login request host must be **Render/Railway**, not `localhost:4000`.
+3. Open `https://<api-host>/health` in Chrome — must return OK.
+4. Vercel `NEXT_PUBLIC_API_URL` + fresh redeploy; Render/Railway `WEB_URL` = Vercel origin.
 
 ### Local database note
 
@@ -154,7 +196,7 @@ Prefer `docker compose up -d` for Postgres + Redis. If Docker Desktop is unavail
 | `pnpm dev` | Start all apps in development |
 | `pnpm build` | Build all apps |
 | `pnpm build:web` | Build web + shared deps (Vercel) |
-| `pnpm build:api` | Build API + shared/db deps (Railway) |
+| `pnpm build:api` | Build API + shared/db deps (Render/Railway) |
 | `pnpm start:api` | Migrate DB then start API |
 | `pnpm test` | Run all tests |
 | `pnpm lint` | Lint all packages |

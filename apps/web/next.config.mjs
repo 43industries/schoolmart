@@ -5,6 +5,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const monorepoRoot = path.join(__dirname, "../..");
 const sharedRoot = path.join(monorepoRoot, "packages/shared");
 
+const publicApiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+if (process.env.VERCEL) {
+  const isLoopback =
+    !publicApiUrl ||
+    /localhost|127\.0\.0\.1/i.test(publicApiUrl);
+  if (isLoopback) {
+    throw new Error(
+      "Vercel builds require NEXT_PUBLIC_API_URL to be a public API base " +
+        "(e.g. https://your-api.onrender.com/api/v1). " +
+        "localhost / 127.0.0.1 is blocked by browsers from the Vercel origin. " +
+        `Got: ${publicApiUrl || "(unset)"}`,
+    );
+  }
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Bundle workspace package into the Next serverless output

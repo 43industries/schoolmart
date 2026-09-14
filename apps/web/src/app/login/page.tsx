@@ -42,8 +42,10 @@ export default function LoginPage() {
             ? ` [${err.requestId}]`
             : "";
         setError(`${err.message}${hint}${req}`);
+      } else if (err instanceof Error && err.message) {
+        setError(err.message);
       } else {
-        setError("Login failed");
+        setError("Login failed. Check the browser Network tab for the API host being called.");
       }
     } finally {
       setLoading(false);

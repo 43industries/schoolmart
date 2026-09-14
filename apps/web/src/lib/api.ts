@@ -32,17 +32,27 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, ...rest } = options;
   const token = getAccessToken();
+  const url = `${API_URL}${path}`;
 
-  const res = await fetch(`${API_URL}${path}`, {
-    ...rest,
-    credentials: "include",
-    headers: {
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...rest,
+      credentials: "include",
+      headers: {
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new ApiError(
+      0,
+      `Cannot reach API at ${API_URL}. If you are on the Vercel site, set NEXT_PUBLIC_API_URL to your Render API (…/api/v1) and redeploy. Local testing: use http://localhost:3000 with the API on :4000.`,
+      "NETWORK_ERROR",
+    );
+  }
 
   const data = await res.json().catch(() => ({}));
 
