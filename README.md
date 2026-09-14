@@ -100,7 +100,7 @@ schoolmart/
 
 Recommended split: **Vercel (web)** + **Render or Railway (API + Postgres)**.
 
-> **Laptop Chrome vs Cursor:** Cursor uses `http://localhost:3000` → local API `:4000`. The Vercel site must call your **public** API (Render/Railway), never `localhost`. Browsers block public HTTPS pages from calling loopback. After changing `NEXT_PUBLIC_API_URL`, **redeploy** Vercel (the value is baked in at build time).
+> **Laptop Chrome vs Cursor:** Cursor uses `http://localhost:3000` → local API `:4000`. On Vercel, prefer **same-origin proxy**: set `API_ORIGIN` to your Render host (no `/api/v1`). The browser calls `/api/v1` on Vercel; Next rewrites to Render. That avoids `NEXT_PUBLIC_*` / Turbo env issues and CORS. After changing env, **redeploy** (and clear any overridden Build Command in Vercel UI so `vercel.json` is used).
 
 ### 1a. Render — API + Postgres (current production)
 
@@ -167,23 +167,27 @@ Copy the Railway public API URL, e.g. `https://schoolmart-api-production.up.rail
 
 | Variable | Value |
 |----------|--------|
-| `NEXT_PUBLIC_API_URL` | `https://<your-render-or-railway-api>/api/v1` |
+| `API_ORIGIN` | `https://<your-service>.onrender.com` (**recommended** — no `/api/v1` suffix) |
+| `NEXT_PUBLIC_API_URL` | Optional. Only if you want the browser to call Render directly: `https://<your-service>.onrender.com/api/v1` |
 
-**Must not** be `http://localhost:4000/...`. Vercel builds now **fail** if this is missing or points at localhost.
+If both are unset, the Vercel build fails on purpose. Prefer `API_ORIGIN` only.
 
-4. **Redeploy** after setting or changing the env var.
-5. Set the API host’s `WEB_URL` to the Vercel origin and redeploy the API so CORS matches.
+4. **Build & Development Settings:** leave **Build Command** empty (use `vercel.json`) or set exactly:  
+   `cd ../.. && pnpm --filter @schoolmart/web build`  
+   Do **not** keep an old Turbo build command override.
+5. **Redeploy** after setting env (disable build cache once).
+6. Set the API host’s `WEB_URL` to the Vercel origin. With the proxy, browsers talk to Vercel only; `WEB_URL` still matters for cookies/CORS on direct API calls.
 
 ### Cross-origin auth
 
-Production cookies use `SameSite=None; Secure` so login works when the web app (Vercel) and API (Render/Railway) are on different domains. The browser frontend must keep calling the API with `credentials: "include"` (already configured).
+Production cookies use `SameSite=None; Secure` for direct browser→API calls. With the **`API_ORIGIN` proxy**, the browser stays same-origin to Vercel (`/api/v1`), which avoids loopback/CORS problems.
 
 ### Login checklist if Chrome fails but Cursor works
 
 1. Confirm you are on the **Vercel** URL in Chrome (not only Cursor’s localhost).
-2. DevTools → Network → login request host must be **Render/Railway**, not `localhost:4000`.
-3. Open `https://<api-host>/health` in Chrome — must return OK.
-4. Vercel `NEXT_PUBLIC_API_URL` + fresh redeploy; Render/Railway `WEB_URL` = Vercel origin.
+2. DevTools → Network → login should be `https://<vercel>/api/v1/auth/login` (proxy) or `https://<render>/api/v1/auth/login` (direct) — **never** `localhost:4000`.
+3. Open `https://<render-host>/health` in Chrome — must return OK.
+4. Vercel has `API_ORIGIN` (or `NEXT_PUBLIC_API_URL`) + fresh redeploy; no stale Build Command override.
 
 ### Local database note
 

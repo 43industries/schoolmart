@@ -1,4 +1,14 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+/**
+ * Browser API base.
+ * - Local: NEXT_PUBLIC_API_URL or http://localhost:4000/api/v1
+ * - Vercel without NEXT_PUBLIC_API_URL: same-origin /api/v1 (rewritten to API_ORIGIN)
+ */
+const API_URL = (() => {
+  const fromEnv = (process.env.NEXT_PUBLIC_API_URL ?? "").trim().replace(/\/$/, "");
+  if (fromEnv) return fromEnv;
+  if (process.env.NEXT_PUBLIC_VERCEL_ENV || process.env.VERCEL) return "/api/v1";
+  return "http://localhost:4000/api/v1";
+})();
 const ACCESS_TOKEN_KEY = "schoolmart_access_token";
 
 export class ApiError extends Error {
@@ -49,7 +59,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   } catch {
     throw new ApiError(
       0,
-      `Cannot reach API at ${API_URL}. If you are on the Vercel site, set NEXT_PUBLIC_API_URL to your Render API (…/api/v1) and redeploy. Local testing: use http://localhost:3000 with the API on :4000.`,
+      `Cannot reach API at ${API_URL}. On Vercel, set API_ORIGIN to your Render host (https://….onrender.com) or NEXT_PUBLIC_API_URL to …/api/v1, then redeploy. Locally use http://localhost:3000 with the API on :4000.`,
       "NETWORK_ERROR",
     );
   }
