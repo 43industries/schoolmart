@@ -5,12 +5,12 @@ import { Card } from "@/components/ui/card";
 import { Check } from "lucide-react";
 
 const benefits = [
-  "Link your children to their schools with school approval",
-  "Browse school-approved products and vendors",
-  "Fund a student wallet with spending controls",
-  "Track orders from payment to collection",
-  "View spending analytics and receipts",
-  "Send care packages with personal messages",
+  "Order meals, essentials and care packages for your child at school",
+  "Pay securely and track every delivery to campus",
+  "Fund a parent-controlled student wallet with spending rules",
+  "Get confirmation when your child collects securely",
+  "Shop from vendors who aggregate and complete last man delivery",
+  "One place for parent-funded and tracked deliveries to schools",
 ];
 
 export default function ForParentsPage() {
@@ -22,10 +22,11 @@ export default function ForParentsPage() {
           <div>
             <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-brand-teal">For Parents</p>
             <h1 className="mb-4 text-4xl font-bold tracking-tight text-brand-ink">
-              Support your child at school — from anywhere
+              Order, pay and track — all the way to collection
             </h1>
             <p className="mb-8 text-lg text-brand-muted">
-              Order meals, school supplies, and care packages for your child. Delivered to school, collected securely.
+              SchoolMart lets you purchase anything and deliver it to your child at school through trusted ecommerce
+              and last man delivery. Vendors aggregate and deliver. You order, pay and track. Your child collects securely.
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               {benefits.map((item) => (

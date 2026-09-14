@@ -47,7 +47,7 @@ export async function authRoutes(app: FastifyInstance) {
     if (!parsed.success) throw new ValidationError("Validation failed", parsed.error.flatten());
 
     const result = await registerParent(parsed.data, auditContextFromRequest(req));
-    return reply.status(201).send({ success: true, userId: result.userId });
+    return reply.status(201).send({ success: true, userId: result.userId, linkId: result.linkId });
   });
 
   app.post("/login", async (req, reply) => {

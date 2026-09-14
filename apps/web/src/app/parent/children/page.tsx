@@ -14,6 +14,8 @@ const navItems = [
   { href: "/parent/children", label: "My Children" },
   { href: "/parent/shop", label: "Shop" },
   { href: "/parent/cart", label: "Cart" },
+  { href: "/parent/wallet", label: "Wallet" },
+  { href: "/parent/activities", label: "Funkies" },
   { href: "/parent/settings", label: "Settings" },
 ];
 
@@ -65,8 +67,11 @@ export default function ChildrenPage() {
                   {link.student.firstName} {link.student.lastName}
                 </p>
                 <p className="text-sm text-brand-muted">
-                  {link.student.school.name} · {link.student.grade} · #{link.student.studentNumber}
+                  {link.student.school.name} · {link.student.grade} · Admission #{link.student.studentNumber}
                 </p>
+                {link.classTeacherName && (
+                  <p className="text-xs text-brand-muted">Class teacher: {link.classTeacherName}</p>
+                )}
                 <p className="text-xs text-brand-muted capitalize">{link.relationship.toLowerCase()}</p>
               </div>
               <span className={`rounded-full px-3 py-1 text-xs font-medium ${

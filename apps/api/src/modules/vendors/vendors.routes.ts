@@ -2,17 +2,31 @@ import type { FastifyInstance } from "fastify";
 import {
   createVendorSchema,
   updateVendorSchema,
+  registerVendorSchema,
   createCategorySchema,
   createProductSchema,
   updateProductSchema,
 } from "@schoolmart/shared";
-import { listVendors, getVendor, createVendor, updateVendor } from "./vendors.service.js";
+import { listVendors, getVendor, createVendor, updateVendor, registerVendor } from "./vendors.service.js";
 import { listCategories, createCategory } from "../categories/categories.service.js";
 import { listProducts, getProduct, createProduct, updateProduct } from "../products/products.service.js";
 import { authenticate, requireSuperAdmin } from "../../middleware/auth.js";
 import { auditContextFromRequest } from "../audit/audit.service.js";
 import { ValidationError } from "../../lib/errors.js";
 import { VendorStatus, ProductStatus } from "@schoolmart/db";
+
+export async function publicVendorRoutes(app: FastifyInstance) {
+  app.post("/register", async (req, reply) => {
+    const parsed = registerVendorSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError("Validation failed", parsed.error.flatten());
+    const result = await registerVendor(parsed.data, auditContextFromRequest(req));
+    return reply.status(201).send({
+      success: true,
+      ...result,
+      message: "Vendor application submitted. Log in after approval to manage your catalog.",
+    });
+  });
+}
 
 export async function adminMarketplaceRoutes(app: FastifyInstance) {
   app.get("/vendors", { preHandler: [authenticate, requireSuperAdmin()] }, async (req, reply) => {

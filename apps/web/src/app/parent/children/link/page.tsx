@@ -14,6 +14,8 @@ const navItems = [
   { href: "/parent/children", label: "My Children" },
   { href: "/parent/shop", label: "Shop" },
   { href: "/parent/cart", label: "Cart" },
+  { href: "/parent/wallet", label: "Wallet" },
+  { href: "/parent/activities", label: "Funkies" },
   { href: "/parent/settings", label: "Settings" },
 ];
 
@@ -28,7 +30,14 @@ export default function LinkChildPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [schools, setSchools] = useState<School[]>([]);
-  const [form, setForm] = useState({ schoolId: "", studentNumber: "", relationship: "MOTHER" });
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    schoolId: "",
+    studentNumber: "",
+    classTeacherName: "",
+    relationship: "MOTHER",
+  });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -62,7 +71,8 @@ export default function LinkChildPage() {
           <CardHeader>
             <CardTitle>Link a Child</CardTitle>
             <CardDescription>
-              Enter your child&apos;s school and student number. The school will approve the link.
+              Provide your child&apos;s name, school, admission number, and class teacher.
+              The school will approve the link before you can order and track deliveries.
             </CardDescription>
           </CardHeader>
           {success ? (
@@ -72,6 +82,20 @@ export default function LinkChildPage() {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  label="Child first name"
+                  value={form.firstName}
+                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                  required
+                />
+                <Input
+                  label="Child last name"
+                  value={form.lastName}
+                  onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                  required
+                />
+              </div>
               <Select
                 label="School"
                 value={form.schoolId}
@@ -80,10 +104,16 @@ export default function LinkChildPage() {
                 required
               />
               <Input
-                label="Student Number"
+                label="Admission number"
                 value={form.studentNumber}
                 onChange={(e) => setForm({ ...form, studentNumber: e.target.value })}
-                placeholder="e.g. GF-2024-001"
+                placeholder="As shown on school records"
+                required
+              />
+              <Input
+                label="Class teacher name"
+                value={form.classTeacherName}
+                onChange={(e) => setForm({ ...form, classTeacherName: e.target.value })}
                 required
               />
               <Select

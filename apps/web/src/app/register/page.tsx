@@ -1,20 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { authApi, ApiError } from "@/lib/api";
-import { Input } from "@/components/ui/input";
+import { authApi, schoolsApi, ApiError, type School } from "@/lib/api";
+import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Logo } from "@/components/ui/logo";
 
+const relationships = [
+  { value: "MOTHER", label: "Mother" },
+  { value: "FATHER", label: "Father" },
+  { value: "GUARDIAN", label: "Guardian" },
+  { value: "OTHER", label: "Other" },
+];
+
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", password: "" });
+  const [schools, setSchools] = useState<School[]>([]);
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    password: "",
+    childFirstName: "",
+    childLastName: "",
+    schoolId: "",
+    studentNumber: "",
+    classTeacherName: "",
+    relationship: "MOTHER",
+  });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    schoolsApi.list().then((res) => setSchools(res.schools)).catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,6 +51,14 @@ export default function RegisterPage() {
         email: form.email || undefined,
         phone: form.phone || undefined,
         password: form.password,
+        child: {
+          firstName: form.childFirstName,
+          lastName: form.childLastName,
+          schoolId: form.schoolId,
+          studentNumber: form.studentNumber,
+          classTeacherName: form.classTeacherName,
+          relationship: form.relationship,
+        },
       });
       router.push("/login?registered=1");
     } catch (err) {
@@ -48,22 +80,28 @@ export default function RegisterPage() {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
         <div className="absolute bottom-10 left-10 right-10 text-white">
-          <p className="text-2xl font-bold">Start supporting your child today</p>
-          <p className="mt-2 text-white/80">Create a parent account and link your children to their school.</p>
+          <p className="text-2xl font-bold">Order, pay, and track</p>
+          <p className="mt-2 text-white/80">
+            Link your child with school and admission number so every delivery is tracked to campus.
+          </p>
         </div>
       </div>
       <div className="flex w-full flex-col items-center justify-center px-4 py-12 lg:w-1/2">
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-lg">
           <div className="mb-8">
             <Logo size="lg" />
           </div>
           <Card>
             <CardHeader>
               <CardTitle>Create parent account</CardTitle>
-              <CardDescription>Register to order for your children at school.</CardDescription>
+              <CardDescription>
+                Register and link your child so you can track deliveries to school.
+              </CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+              <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted">Your details</p>
               <div className="grid grid-cols-2 gap-3">
                 <Input label="First name" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} required />
                 <Input label="Last name" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} required />
@@ -72,8 +110,55 @@ export default function RegisterPage() {
               <Input label="Phone (Kenya)" type="tel" placeholder="0712345678" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
               <p className="text-xs text-brand-muted">Provide email or phone (at least one required)</p>
               <Input label="Password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+
+              <div className="border-t border-gray-100 pt-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-muted">Your child at school</p>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="Child first name"
+                      value={form.childFirstName}
+                      onChange={(e) => setForm({ ...form, childFirstName: e.target.value })}
+                      required
+                    />
+                    <Input
+                      label="Child last name"
+                      value={form.childLastName}
+                      onChange={(e) => setForm({ ...form, childLastName: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <Select
+                    label="School"
+                    value={form.schoolId}
+                    onChange={(e) => setForm({ ...form, schoolId: e.target.value })}
+                    options={[{ value: "", label: "Select a school" }, ...schools.map((s) => ({ value: s.id, label: `${s.name} (${s.town})` }))]}
+                    required
+                  />
+                  <Input
+                    label="Admission number"
+                    value={form.studentNumber}
+                    onChange={(e) => setForm({ ...form, studentNumber: e.target.value })}
+                    placeholder="As shown on school records"
+                    required
+                  />
+                  <Input
+                    label="Class teacher name"
+                    value={form.classTeacherName}
+                    onChange={(e) => setForm({ ...form, classTeacherName: e.target.value })}
+                    required
+                  />
+                  <Select
+                    label="Your relationship"
+                    value={form.relationship}
+                    onChange={(e) => setForm({ ...form, relationship: e.target.value })}
+                    options={relationships}
+                  />
+                </div>
+              </div>
+
               <Button type="submit" disabled={loading} className="w-full">
-                {loading ? "Creating account..." : "Create account"}
+                {loading ? "Creating account..." : "Create account & link child"}
               </Button>
             </form>
             <p className="mt-4 text-center text-sm text-brand-muted">

@@ -10,8 +10,7 @@ export function MarketingHeader() {
         <nav className="hidden items-center gap-7 md:flex">
           <Link href="/how-it-works" className="text-sm font-medium text-brand-muted hover:text-brand-teal">How it works</Link>
           <Link href="/for-parents" className="text-sm font-medium text-brand-muted hover:text-brand-teal">For Parents</Link>
-          <Link href="/for-schools" className="text-sm font-medium text-brand-muted hover:text-brand-teal">For Schools</Link>
-          <Link href="/for-vendors" className="text-sm font-medium text-brand-muted hover:text-brand-teal">For Vendors</Link>
+          <Link href="/vendors" className="text-sm font-medium text-brand-muted hover:text-brand-teal">For Vendors</Link>
           <Link href="/faq" className="text-sm font-medium text-brand-muted hover:text-brand-teal">FAQ</Link>
         </nav>
         <div className="flex items-center gap-4">
@@ -35,7 +34,7 @@ export function MarketingFooter() {
               <Logo href="/" />
             </div>
             <p className="text-sm text-brand-muted">
-              Connecting parents to their children at school through trusted commerce and delivery.
+              Seamless infrastructure for parents to purchase anything and deliver it to their children at school — trusted ecommerce and last man delivery.
             </p>
           </div>
           <div>
@@ -43,8 +42,7 @@ export function MarketingFooter() {
             <ul className="space-y-2 text-sm text-brand-muted">
               <li><Link href="/how-it-works" className="hover:text-brand-teal">How it works</Link></li>
               <li><Link href="/for-parents" className="hover:text-brand-teal">For Parents</Link></li>
-              <li><Link href="/for-schools" className="hover:text-brand-teal">For Schools</Link></li>
-              <li><Link href="/for-vendors" className="hover:text-brand-teal">For Vendors</Link></li>
+              <li><Link href="/vendors" className="hover:text-brand-teal">For Vendors</Link></li>
             </ul>
           </div>
           <div>
@@ -58,13 +56,18 @@ export function MarketingFooter() {
           <div>
             <h4 className="mb-3 font-semibold text-brand-ink">Get started</h4>
             <p className="mb-4 text-sm text-brand-muted">
-              Join parents, schools, and vendors already on SchoolMart.
+              Parents order, pay and track. Vendors aggregate and deliver.
             </p>
-            <Button href="/register">Create account</Button>
+            <div className="flex flex-col gap-2 sm:items-start">
+              <Button href="/register">Create parent account</Button>
+              <Link href="/vendors" className="text-sm font-semibold text-brand-teal hover:underline">
+                Become a vendor →
+              </Link>
+            </div>
           </div>
         </div>
         <div className="mt-10 border-t border-gray-200 pt-6 text-center text-sm text-brand-muted">
-          &copy; {new Date().getFullYear()} SchoolMart. Built for Kenyan schools.
+          &copy; {new Date().getFullYear()} SchoolMart. Parent-funded and tracked deliveries to schools.
         </div>
       </div>
     </footer>

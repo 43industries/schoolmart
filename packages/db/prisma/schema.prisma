@@ -152,6 +152,20 @@ enum TicketPriority {
   URGENT
 }
 
+enum ActivityStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  CANCELLED
+}
+
+enum ActivityRegistrationStatus {
+  PENDING_PARENT
+  CONFIRMED
+  CANCELLED
+  REJECTED
+}
+
 enum LedgerAccountCode {
   PARENT_CASH
   STUDENT_WALLET
@@ -183,9 +197,11 @@ model User {
   roles              UserRole[]
   sessions           Session[]
   parentProfile      ParentProfile?
+  ownedVendors       Vendor[]            @relation("VendorOwner")
   auditLogs          AuditLog[]
   approvedLinks      ParentStudentLink[] @relation("ApprovedBy")
   passwordResetTokens PasswordResetToken[]
+  studentProfile     Student?
 
   @@index([email])
   @@index([phoneE164])
@@ -261,6 +277,7 @@ model School {
   deliveryWindows DeliveryWindow[]
   deliveryBatches DeliveryBatch[]
   orders         Order[]
+  activities     SchoolActivity[]
 
   @@index([status])
   @@index([slug])
@@ -297,9 +314,11 @@ model Student {
   updatedAt         DateTime       @updatedAt @map("updated_at")
 
   school       School              @relation(fields: [schoolId], references: [id])
+  user         User?               @relation(fields: [userId], references: [id])
   parentLinks  ParentStudentLink[]
   wallet       Wallet?
   orders       Order[]
+  activityRegistrations ActivityRegistration[]
 
   @@unique([schoolId, studentNumber])
   @@index([schoolId])
@@ -318,17 +337,20 @@ model ParentProfile {
 }
 
 model ParentStudentLink {
-  id              String       @id @default(uuid())
-  parentUserId    String       @map("parent_user_id")
-  studentId       String       @map("student_id")
-  relationship    Relationship
-  status          LinkStatus   @default(PENDING_SCHOOL_APPROVAL)
-  consentedAt     DateTime?    @map("consented_at")
-  approvedByUserId String?     @map("approved_by_user_id")
-  approvedAt      DateTime?    @map("approved_at")
-  rejectedReason  String?      @map("rejected_reason")
-  createdAt       DateTime     @default(now()) @map("created_at")
-  updatedAt       DateTime     @updatedAt @map("updated_at")
+  id                String       @id @default(uuid())
+  parentUserId      String       @map("parent_user_id")
+  studentId         String       @map("student_id")
+  relationship      Relationship
+  status            LinkStatus   @default(PENDING_SCHOOL_APPROVAL)
+  claimedFirstName  String?      @map("claimed_first_name")
+  claimedLastName   String?      @map("claimed_last_name")
+  classTeacherName  String?      @map("class_teacher_name")
+  consentedAt       DateTime?    @map("consented_at")
+  approvedByUserId  String?      @map("approved_by_user_id")
+  approvedAt        DateTime?    @map("approved_at")
+  rejectedReason    String?      @map("rejected_reason")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
 
   parentProfile ParentProfile @relation(fields: [parentUserId], references: [userId], onDelete: Cascade)
   student       Student       @relation(fields: [studentId], references: [id])
@@ -372,20 +394,32 @@ model PlatformSettings {
 // ─── Phase 2+: Forward-compatible stubs ──────────────────────────────────────
 
 model Vendor {
-  id          String       @id @default(uuid())
-  name        String
-  slug        String       @unique
-  description String?
-  status      VendorStatus @default(PENDING)
-  contactEmail String?     @map("contact_email")
-  contactPhone String?     @map("contact_phone")
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  id                 String       @id @default(uuid())
+  name               String
+  slug               String       @unique
+  description        String?
+  status             VendorStatus @default(PENDING)
+  contactEmail       String?      @map("contact_email")
+  contactPhone       String?      @map("contact_phone")
+  ownerUserId        String?      @map("owner_user_id")
+  county             String?
+  town               String?
+  addressLine        String?      @map("address_line")
+  sellCategories     Json         @default("[]") @map("sell_categories")
+  termsVersion       String?      @map("terms_version")
+  termsAcceptedAt    DateTime?    @map("terms_accepted_at")
+  agreementVersion   String?      @map("agreement_version")
+  agreementAcceptedAt DateTime?   @map("agreement_accepted_at")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
 
+  owner         User?          @relation("VendorOwner", fields: [ownerUserId], references: [id])
   products      Product[]
   schoolVendors SchoolVendor[]
   orders        Order[]
 
+  @@index([ownerUserId])
+  @@index([status])
   @@map("vendors")
 }
 
@@ -713,6 +747,53 @@ model SupportMessage {
 
   @@index([ticketId])
   @@map("support_messages")
+}
+
+model SchoolActivity {
+  id              String         @id @default(uuid())
+  schoolId        String         @map("school_id")
+  title           String
+  description     String?
+  category        String         @default("FUNKIES")
+  location        String?
+  startsAt        DateTime       @map("starts_at")
+  endsAt          DateTime?      @map("ends_at")
+  feeMinor        Int            @default(0) @map("fee_minor")
+  capacity        Int?
+  status          ActivityStatus @default(DRAFT)
+  createdByUserId String?        @map("created_by_user_id")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  school         School                 @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  registrations  ActivityRegistration[]
+
+  @@index([schoolId])
+  @@index([status])
+  @@index([startsAt])
+  @@map("school_activities")
+}
+
+model ActivityRegistration {
+  id           String                      @id @default(uuid())
+  activityId   String                      @map("activity_id")
+  studentId    String                      @map("student_id")
+  parentUserId String                      @map("parent_user_id")
+  status       ActivityRegistrationStatus  @default(PENDING_PARENT)
+  paidMinor    Int                         @default(0) @map("paid_minor")
+  notes        String?
+  confirmedAt  DateTime?                   @map("confirmed_at")
+  createdAt    DateTime                    @default(now()) @map("created_at")
+  updatedAt    DateTime                    @updatedAt @map("updated_at")
+
+  activity SchoolActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  student  Student        @relation(fields: [studentId], references: [id])
+
+  @@unique([activityId, studentId])
+  @@index([parentUserId])
+  @@index([studentId])
+  @@index([status])
+  @@map("activity_registrations")
 }
 
 model LedgerEntry {

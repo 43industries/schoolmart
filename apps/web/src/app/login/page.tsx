@@ -51,8 +51,8 @@ export default function LoginPage() {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
         <div className="absolute bottom-10 left-10 right-10 text-white">
-          <p className="text-2xl font-bold">Secure delivery to school</p>
-          <p className="mt-2 text-white/80">Parents order. Schools manage. Students collect with confidence.</p>
+          <p className="text-2xl font-bold">Tracked deliveries to school</p>
+          <p className="mt-2 text-white/80">Vendors aggregate and deliver. Parents order, pay and track. Students collect securely.</p>
         </div>
       </div>
       <div className="flex w-full flex-col items-center justify-center px-4 py-12 lg:w-1/2">
@@ -75,7 +75,9 @@ export default function LoginPage() {
             </form>
             <p className="mt-4 text-center text-sm text-brand-muted">
               Don&apos;t have an account?{" "}
-              <Link href="/register" className="font-semibold text-brand-teal hover:underline">Register</Link>
+              <Link href="/register" className="font-semibold text-brand-teal hover:underline">Register as parent</Link>
+              {" · "}
+              <Link href="/student/activate" className="font-semibold text-brand-teal hover:underline">Activate student</Link>
             </p>
           </Card>
         </div>

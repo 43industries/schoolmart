@@ -2,6 +2,7 @@ import { prisma, LinkStatus } from "@schoolmart/db";
 import type { LinkChildInput } from "@schoolmart/shared";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { writeAuditLog, type AuditContext } from "../audit/audit.service.js";
+import { ensureWalletForStudent } from "../wallets/wallets.service.js";
 
 export async function linkChild(parentUserId: string, input: LinkChildInput, ctx: AuditContext) {
   const parentProfile = await prisma.parentProfile.findUnique({ where: { userId: parentUserId } });
@@ -10,7 +11,7 @@ export async function linkChild(parentUserId: string, input: LinkChildInput, ctx
   const student = await prisma.student.findUnique({
     where: { schoolId_studentNumber: { schoolId: input.schoolId, studentNumber: input.studentNumber } },
   });
-  if (!student) throw new NotFoundError("Student not found at this school");
+  if (!student) throw new NotFoundError("Student not found at this school. Check the admission number.");
 
   const existing = await prisma.parentStudentLink.findUnique({
     where: { parentUserId_studentId: { parentUserId, studentId: student.id } },
@@ -23,11 +24,22 @@ export async function linkChild(parentUserId: string, input: LinkChildInput, ctx
       studentId: student.id,
       relationship: input.relationship,
       status: LinkStatus.PENDING_SCHOOL_APPROVAL,
+      claimedFirstName: input.firstName,
+      claimedLastName: input.lastName,
+      classTeacherName: input.classTeacherName,
       consentedAt: new Date(),
     },
     include: {
       student: {
-        select: { id: true, firstName: true, lastName: true, studentNumber: true, grade: true, schoolId: true },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          studentNumber: true,
+          grade: true,
+          schoolId: true,
+          school: { select: { id: true, name: true, town: true } },
+        },
       },
     },
   });
@@ -44,6 +56,9 @@ export async function linkChild(parentUserId: string, input: LinkChildInput, ctx
     id: link.id,
     status: link.status,
     relationship: link.relationship,
+    claimedFirstName: link.claimedFirstName,
+    claimedLastName: link.claimedLastName,
+    classTeacherName: link.classTeacherName,
     student: link.student,
     createdAt: link.createdAt,
   };
@@ -75,13 +90,20 @@ export async function listParentChildren(parentUserId: string) {
     id: link.id,
     status: link.status,
     relationship: link.relationship,
+    claimedFirstName: link.claimedFirstName,
+    claimedLastName: link.claimedLastName,
+    classTeacherName: link.classTeacherName,
     approvedAt: link.approvedAt,
-    student: link.status === LinkStatus.ACTIVE ? link.student : {
+    student: {
       id: link.student.id,
       firstName: link.student.firstName,
       lastName: link.student.lastName,
+      preferredName: link.student.preferredName,
       studentNumber: link.student.studentNumber,
       grade: link.student.grade,
+      className: link.student.className,
+      boardingStatus: link.student.boardingStatus,
+      status: link.student.status,
       school: link.student.school,
     },
     createdAt: link.createdAt,
@@ -118,6 +140,8 @@ export async function approveLink(linkId: string, schoolId: string, approverUser
       approvedAt: new Date(),
     },
   });
+
+  await ensureWalletForStudent(link.studentId);
 
   await writeAuditLog({
     action: "PARENT_LINK_APPROVED",

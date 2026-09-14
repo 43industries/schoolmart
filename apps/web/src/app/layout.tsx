@@ -14,8 +14,9 @@ const sourceSerif = Source_Serif_4({
 });
 
 export const metadata: Metadata = {
-  title: "SchoolMart — Meals, essentials & care packages delivered to your child at school",
-  description: "Parents order and pay. Schools manage. Vendors fulfil. Students collect securely.",
+  title: "SchoolMart — Parent-funded and tracked deliveries to schools",
+  description:
+    "Seamless infrastructure for parents to purchase anything and deliver it to their children at school. Vendors aggregate and deliver. Parents order, pay and track. Students collect securely. Trusted ecommerce and last man delivery.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

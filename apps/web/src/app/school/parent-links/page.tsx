@@ -13,6 +13,7 @@ const navItems = [
   { href: "/school", label: "Dashboard" },
   { href: "/school/students", label: "Students" },
   { href: "/school/parent-links", label: "Parent Links" },
+  { href: "/school/activities", label: "Funkies" },
   { href: "/school/catalog", label: "Catalog" },
   { href: "/school/settings", label: "Settings" },
 ];
@@ -20,6 +21,9 @@ const navItems = [
 interface PendingLink {
   id: string;
   relationship: string;
+  claimedFirstName?: string | null;
+  claimedLastName?: string | null;
+  classTeacherName?: string | null;
   createdAt: string;
   student: { firstName: string; lastName: string; studentNumber: string; grade: string };
   parentProfile: { user: { firstName: string; lastName: string; email: string | null; phoneE164: string | null } };
@@ -99,8 +103,14 @@ export default function ParentLinksPage() {
                     </span>
                   </p>
                   <p className="text-sm text-brand-muted">
-                    Wants to link to: {link.student.firstName} {link.student.lastName} (#{link.student.studentNumber}, {link.student.grade})
+                    Claims: {link.claimedFirstName ?? "—"} {link.claimedLastName ?? ""} · Admission #{link.student.studentNumber}
                   </p>
+                  <p className="text-sm text-brand-muted">
+                    School record: {link.student.firstName} {link.student.lastName} ({link.student.grade})
+                  </p>
+                  {link.classTeacherName && (
+                    <p className="text-sm text-brand-muted">Class teacher: {link.classTeacherName}</p>
+                  )}
                   <p className="text-xs text-brand-muted">
                     {link.parentProfile.user.email ?? link.parentProfile.user.phoneE164}
                   </p>

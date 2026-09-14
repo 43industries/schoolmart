@@ -11,7 +11,7 @@ export default function ContactPage() {
         <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-brand-teal">Get in touch</p>
         <h1 className="mb-4 text-4xl font-bold tracking-tight text-brand-ink">Contact Us</h1>
         <p className="mb-10 text-lg text-brand-muted">
-          Questions about partnering, onboarding, or parent accounts? We&apos;d love to hear from you.
+          Questions about parent accounts, vendor onboarding, or last man delivery to schools? We&apos;d love to hear from you.
         </p>
         <div className="grid gap-4 sm:grid-cols-3">
           <Card className="text-center">
@@ -30,8 +30,9 @@ export default function ContactPage() {
             <p className="mt-1 text-sm text-brand-muted">Nairobi, Kenya</p>
           </Card>
         </div>
-        <div className="mt-10 text-center">
-          <Button href="/register">Create an account</Button>
+        <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+          <Button href="/register">Create parent account</Button>
+          <Button variant="secondary" href="/vendors/register">Become a vendor</Button>
         </div>
       </main>
       <MarketingFooter />

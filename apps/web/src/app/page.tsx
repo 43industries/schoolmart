@@ -3,32 +3,34 @@ import Link from "next/link";
 import { MarketingHeader, MarketingFooter } from "@/components/layout/marketing-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowRight, Shield, Wallet, Package, School, Truck, Users } from "lucide-react";
+import { ArrowRight, Shield, Wallet, Package, Truck, Store, MapPin } from "lucide-react";
 
 export default function HomePage() {
   return (
     <>
       <MarketingHeader />
       <main>
-        {/* Hero — two-column */}
         <section className="px-4 py-14 md:py-20">
           <div className="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-2 lg:gap-14">
             <div>
               <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-brand-teal">
-                Parent-funded student commerce
+                Parent-funded and tracked deliveries to schools
               </p>
               <h1 className="text-4xl font-bold leading-[1.1] tracking-tight text-brand-ink md:text-5xl lg:text-[3.25rem]">
                 The{" "}
-                <span className="text-brand-teal">easy way</span>{" "}
+                <span className="text-brand-teal">easiest way</span>{" "}
                 to send meals, essentials &amp; care packages to your child at school
               </h1>
               <p className="mt-6 max-w-lg text-lg leading-relaxed text-brand-muted">
-                Parents order and pay. Schools manage. Vendors fulfil. Students collect securely — no WhatsApp juggling required.
+                SchoolMart is seamless infrastructure that lets parents purchase anything and deliver it to their children at school — through trusted ecommerce and last man delivery.
+              </p>
+              <p className="mt-4 max-w-lg text-base font-medium text-brand-ink">
+                Vendors aggregate and deliver. Parents order, pay and track. Students collect securely.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <Button href="/register">Get Started as a Parent</Button>
-                <Button variant="secondary" href="/for-schools">
-                  Partner with SchoolMart
+                <Button variant="secondary" href="/vendors">
+                  Become a vendor
                 </Button>
               </div>
             </div>
@@ -47,20 +49,19 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Flow */}
         <section className="bg-brand-surface px-4 py-16">
           <div className="mx-auto max-w-5xl">
             <h2 className="mb-3 text-center text-3xl font-bold text-brand-ink">How SchoolMart works</h2>
             <p className="mx-auto mb-12 max-w-xl text-center text-brand-muted">
-              One trusted path from order to collection — built for Kenyan schools.
+              Vendors aggregate and deliver. Parents order, pay and track. Students collect securely.
             </p>
             <div className="grid gap-4 md:grid-cols-5">
               {[
-                { icon: Users, label: "Parent", desc: "Orders & pays" },
+                { icon: Store, label: "Vendors", desc: "Aggregate & deliver" },
                 { icon: ArrowRight, label: "", desc: "", className: "hidden md:flex items-center justify-center" },
-                { icon: School, label: "School", desc: "Receives & stores" },
+                { icon: MapPin, label: "Parents", desc: "Order, pay & track" },
                 { icon: ArrowRight, label: "", desc: "", className: "hidden md:flex items-center justify-center" },
-                { icon: Package, label: "Student", desc: "Collects securely" },
+                { icon: Package, label: "Students", desc: "Collect securely" },
               ].filter((s) => s.label !== "" || s.className).map((step, i) => (
                 step.className ? (
                   <div key={i} className={step.className}>
@@ -83,21 +84,20 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Features */}
         <section className="px-4 py-16">
           <div className="mx-auto max-w-5xl">
-            <h2 className="mb-3 text-center text-3xl font-bold text-brand-ink">Built for Kenyan schools</h2>
+            <h2 className="mb-3 text-center text-3xl font-bold text-brand-ink">Trusted ecommerce to the school gate</h2>
             <p className="mx-auto mb-12 max-w-xl text-center text-brand-muted">
-              Tools every party loves — parents, schools, vendors, and students.
+              Purchase what your child needs. Track every step. Deliver with last man delivery.
             </p>
             <div className="grid gap-6 md:grid-cols-3">
               {[
-                { icon: Wallet, title: "Student Wallet", desc: "Fund your child's wallet with spending limits and category controls. Parent-controlled, always." },
-                { icon: Package, title: "Care Packages", desc: "Birthday, exam survival, term starter — send love and essentials directly to school." },
-                { icon: Shield, title: "Secure Collection", desc: "PIN, QR code, or student ID verification. Schools confirm every handover." },
-                { icon: Truck, title: "School-Centric Delivery", desc: "Orders aggregated and delivered in batches to approved collection points." },
-                { icon: School, title: "School Dashboard", desc: "Schools manage students, approve parent links, and track deliveries." },
-                { icon: Users, title: "Multi-Vendor Marketplace", desc: "Meals, supplies, personal care, and services from approved vendors." },
+                { icon: Wallet, title: "Parent-controlled wallet", desc: "Fund your child's wallet with spending limits and category controls — you stay in charge." },
+                { icon: Package, title: "Anything to school", desc: "Meals, essentials, care packages and more — ordered online, delivered to campus." },
+                { icon: Shield, title: "Secure collection", desc: "PIN, QR code, or student ID verification so only your child collects." },
+                { icon: Truck, title: "Last man delivery", desc: "Vendors aggregate orders and complete delivery to the school collection point." },
+                { icon: MapPin, title: "Full order tracking", desc: "Parents order, pay and track from checkout to collection confirmation." },
+                { icon: Store, title: "Multi-vendor marketplace", desc: "A range of vendors selling meals, supplies, personal care and campus essentials." },
               ].map((f) => (
                 <Card key={f.title} className="transition hover:shadow-md">
                   <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-teal/10">
@@ -111,16 +111,19 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* CTA */}
         <section className="px-4 pb-16">
           <div className="mx-auto max-w-3xl rounded-[2rem] bg-brand-teal px-8 py-12 text-center text-white shadow-lg shadow-brand-teal/20">
-            <h2 className="text-3xl font-bold">Ready to connect with your child at school?</h2>
-            <p className="mt-4 text-white/90">Join SchoolMart and order with confidence.</p>
+            <h2 className="text-3xl font-bold">Ready to deliver to your child at school?</h2>
+            <p className="mt-4 text-white/90">
+              Parents order, pay and track. Vendors aggregate and deliver. Students collect securely.
+            </p>
             <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
               <Button href="/register" className="!bg-white !text-brand-teal hover:!bg-white/90">
                 Create Parent Account
               </Button>
-              <Link href="/contact" className="text-sm text-white/80 underline hover:text-white">Contact us</Link>
+              <Button href="/vendors" variant="secondary" className="!border-white/40 !bg-transparent !text-white hover:!bg-white/10">
+                Become a vendor
+              </Button>
             </div>
           </div>
         </section>

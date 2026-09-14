@@ -4,14 +4,13 @@ import { Card } from "@/components/ui/card";
 
 export default function HowItWorksPage() {
   const steps = [
-    { num: "1", title: "Parent creates account", desc: "Register, verify your account, and link your children to their schools." },
-    { num: "2", title: "Browse & order", desc: "Browse meals, school supplies, care packages, and services available at your child's school." },
-    { num: "3", title: "Pay securely", desc: "Pay via M-PESA, card, or student wallet. Every payment is verified by the backend." },
-    { num: "4", title: "Orders aggregated", desc: "Orders for the same school are grouped into delivery batches for efficient school-centric delivery." },
-    { num: "5", title: "Vendor prepares", desc: "Approved vendors prepare and package orders according to school delivery schedules." },
-    { num: "6", title: "Delivered to school", desc: "Logistics delivers batches to approved collection points at the school." },
-    { num: "7", title: "Student collects", desc: "Your child verifies identity with PIN, QR code, or student ID and collects their order." },
-    { num: "8", title: "Parent notified", desc: "You receive confirmation when your child collects their order." },
+    { num: "1", title: "Parent creates an account", desc: "Register and link your children so you can order, pay and track deliveries to school." },
+    { num: "2", title: "Browse & order", desc: "Choose meals, essentials, care packages and more from vendors serving your child's campus." },
+    { num: "3", title: "Pay securely", desc: "Pay via M-PESA, card, or parent-controlled student wallet. Payments are verified by the platform." },
+    { num: "4", title: "Vendors aggregate", desc: "Vendors group orders and prepare fulfilment for efficient last man delivery to school." },
+    { num: "5", title: "Last man delivery", desc: "Orders are delivered to the school collection point — tracked for the parent the whole way." },
+    { num: "6", title: "Student collects securely", desc: "Your child verifies identity with PIN, QR code, or student ID and collects their order." },
+    { num: "7", title: "Parent tracks confirmation", desc: "You see collection confirmation so tracked deliveries close the loop." },
   ];
 
   return (
@@ -22,7 +21,8 @@ export default function HowItWorksPage() {
           <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-brand-teal">The journey</p>
           <h1 className="mb-4 text-4xl font-bold tracking-tight text-brand-ink">How it works</h1>
           <p className="text-lg text-brand-muted">
-            SchoolMart coordinates the full path from parent order to student collection — for every party involved.
+            Vendors aggregate and deliver. Parents order, pay and track. Students collect securely —
+            parent-funded and tracked deliveries to schools.
           </p>
         </div>
         <div className="space-y-4">
@@ -38,8 +38,9 @@ export default function HowItWorksPage() {
             </Card>
           ))}
         </div>
-        <div className="mt-12 text-center">
-          <Button href="/register">Get started</Button>
+        <div className="mt-12 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+          <Button href="/register">Get started as a parent</Button>
+          <Button variant="secondary" href="/vendors">Become a vendor</Button>
         </div>
       </main>
       <MarketingFooter />

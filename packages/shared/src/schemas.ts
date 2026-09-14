@@ -7,6 +7,11 @@ import {
   SCOPE_TYPES,
   VENDOR_STATUSES,
   PRODUCT_STATUSES,
+  VENDOR_SELL_CATEGORIES,
+  WALLET_RULE_CATEGORIES,
+  WALLET_RULE_PERIODS,
+  ACTIVITY_CATEGORIES,
+  ACTIVITY_STATUSES,
 } from "./enums.js";
 
 export const emailSchema = z.string().email().toLowerCase();
@@ -30,6 +35,16 @@ export const phoneSchema = z
     return normalized;
   });
 
+export const childOnboardingSchema = z.object({
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  schoolId: z.string().uuid(),
+  /** Admission number — unique with school, not a global DB primary key */
+  studentNumber: z.string().min(1).max(50),
+  classTeacherName: z.string().min(1).max(150),
+  relationship: z.enum(RELATIONSHIPS),
+});
+
 export const registerSchema = z
   .object({
     email: emailSchema.optional(),
@@ -37,6 +52,7 @@ export const registerSchema = z
     password: passwordSchema,
     firstName: z.string().min(1).max(100),
     lastName: z.string().min(1).max(100),
+    child: childOnboardingSchema,
   })
   .refine((data) => data.email || data.phone, {
     message: "Email or phone is required",
@@ -83,11 +99,7 @@ export const createStudentSchema = z.object({
   collectionPin: z.string().min(4).max(6).optional(),
 });
 
-export const linkChildSchema = z.object({
-  schoolId: z.string().uuid(),
-  studentNumber: z.string().min(1).max(50),
-  relationship: z.enum(RELATIONSHIPS),
-});
+export const linkChildSchema = childOnboardingSchema;
 
 export const createAdminUserSchema = z.object({
   email: emailSchema,
@@ -115,6 +127,31 @@ export const createVendorSchema = z.object({
 export const updateVendorSchema = createVendorSchema.partial().extend({
   status: z.enum(VENDOR_STATUSES).optional(),
 });
+
+export const registerVendorSchema = z
+  .object({
+    businessName: z.string().min(2).max(200),
+    firstName: z.string().min(1).max(100),
+    lastName: z.string().min(1).max(100),
+    email: emailSchema.optional(),
+    phone: phoneSchema.optional(),
+    password: passwordSchema,
+    description: z.string().max(2000).optional(),
+    county: z.string().min(2).max(100),
+    town: z.string().min(2).max(100),
+    addressLine: z.string().max(300).optional(),
+    sellCategories: z.array(z.enum(VENDOR_SELL_CATEGORIES)).min(1, "Select at least one category"),
+    acceptVendorTerms: z.literal(true, {
+      errorMap: () => ({ message: "You must accept the vendor terms" }),
+    }),
+    acceptPlatformAgreement: z.literal(true, {
+      errorMap: () => ({ message: "You must accept the platform agreement" }),
+    }),
+  })
+  .refine((data) => data.email || data.phone, {
+    message: "Email or phone is required",
+    path: ["email"],
+  });
 
 export const createCategorySchema = z.object({
   name: z.string().min(1).max(100),
@@ -168,6 +205,64 @@ export const updateCartItemSchema = z.object({
   quantity: z.number().int().min(0).max(99),
 });
 
+export const fundWalletSchema = z.object({
+  studentId: z.string().uuid(),
+  /** Amount in minor units (cents). e.g. 100000 = KSh 1,000 */
+  amountMinor: z.number().int().positive().max(50_000_000),
+  phone: phoneSchema.optional(),
+});
+
+export const upsertWalletRuleSchema = z.object({
+  studentId: z.string().uuid(),
+  category: z.enum(WALLET_RULE_CATEGORIES),
+  period: z.enum(WALLET_RULE_PERIODS),
+  limitMinor: z.number().int().positive().max(50_000_000),
+  requiresApproval: z.boolean().default(false),
+});
+
+export const activateStudentSchema = z
+  .object({
+    schoolId: z.string().uuid(),
+    studentNumber: z.string().min(1).max(50),
+    collectionPin: z.string().min(4).max(6),
+    email: emailSchema.optional(),
+    phone: phoneSchema.optional(),
+    password: passwordSchema,
+  })
+  .refine((data) => data.email || data.phone, {
+    message: "Email or phone is required",
+    path: ["email"],
+  });
+
+export const confirmCollectionSchema = z.object({
+  orderId: z.string().uuid(),
+  collectionPin: z.string().min(4).max(6),
+});
+
+export const createActivitySchema = z.object({
+  title: z.string().min(2).max(200),
+  description: z.string().max(5000).optional(),
+  category: z.enum(ACTIVITY_CATEGORIES).default("FUNKIES"),
+  location: z.string().max(200).optional(),
+  startsAt: z.coerce.date(),
+  endsAt: z.coerce.date().optional(),
+  feeMinor: z.number().int().min(0).max(50_000_000).default(0),
+  capacity: z.number().int().positive().max(10000).optional(),
+  status: z.enum(ACTIVITY_STATUSES).default("DRAFT"),
+});
+
+export const updateActivitySchema = createActivitySchema.partial();
+
+export const registerActivitySchema = z.object({
+  activityId: z.string().uuid(),
+  studentId: z.string().uuid(),
+  notes: z.string().max(500).optional(),
+});
+
+export const confirmActivityRegistrationSchema = z.object({
+  registrationId: z.string().uuid(),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
@@ -178,9 +273,18 @@ export type LinkChildInput = z.infer<typeof linkChildSchema>;
 export type CreateAdminUserInput = z.infer<typeof createAdminUserSchema>;
 export type CreateVendorInput = z.infer<typeof createVendorSchema>;
 export type UpdateVendorInput = z.infer<typeof updateVendorSchema>;
+export type RegisterVendorInput = z.infer<typeof registerVendorSchema>;
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 export type CatalogSearchInput = z.infer<typeof catalogSearchSchema>;
 export type AddCartItemInput = z.infer<typeof addCartItemSchema>;
 export type UpdateCartItemInput = z.infer<typeof updateCartItemSchema>;
+export type FundWalletInput = z.infer<typeof fundWalletSchema>;
+export type UpsertWalletRuleInput = z.infer<typeof upsertWalletRuleSchema>;
+export type ActivateStudentInput = z.infer<typeof activateStudentSchema>;
+export type ConfirmCollectionInput = z.infer<typeof confirmCollectionSchema>;
+export type CreateActivityInput = z.infer<typeof createActivitySchema>;
+export type UpdateActivityInput = z.infer<typeof updateActivitySchema>;
+export type RegisterActivityInput = z.infer<typeof registerActivitySchema>;
+export type ConfirmActivityRegistrationInput = z.infer<typeof confirmActivityRegistrationSchema>;

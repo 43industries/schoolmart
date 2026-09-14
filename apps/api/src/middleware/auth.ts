@@ -50,6 +50,10 @@ export function requireParent() {
   return requireRole(Role.PARENT);
 }
 
+export function requireStudent() {
+  return requireRole(Role.STUDENT);
+}
+
 export function requireSuperAdmin() {
   return requireRole(Role.SUPER_ADMIN);
 }

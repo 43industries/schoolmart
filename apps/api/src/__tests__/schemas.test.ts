@@ -1,23 +1,34 @@
 import { describe, it, expect } from "vitest";
 import { registerSchema, loginSchema, createSchoolSchema } from "@schoolmart/shared";
 
+const child = {
+  firstName: "Amina",
+  lastName: "Doe",
+  schoolId: "11111111-1111-1111-1111-111111111111",
+  studentNumber: "GF-2024-001",
+  classTeacherName: "Mrs. Wanjiku",
+  relationship: "MOTHER" as const,
+};
+
 describe("registerSchema", () => {
-  it("accepts email registration", () => {
+  it("accepts email registration with child", () => {
     const result = registerSchema.safeParse({
       email: "test@example.com",
       password: "Password1",
       firstName: "John",
       lastName: "Doe",
+      child,
     });
     expect(result.success).toBe(true);
   });
 
-  it("accepts phone registration", () => {
+  it("accepts phone registration with child", () => {
     const result = registerSchema.safeParse({
       phone: "0712345678",
       password: "Password1",
       firstName: "John",
       lastName: "Doe",
+      child,
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -27,6 +38,17 @@ describe("registerSchema", () => {
 
   it("rejects without email or phone", () => {
     const result = registerSchema.safeParse({
+      password: "Password1",
+      firstName: "John",
+      lastName: "Doe",
+      child,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects without child details", () => {
+    const result = registerSchema.safeParse({
+      email: "test@example.com",
       password: "Password1",
       firstName: "John",
       lastName: "Doe",
@@ -40,6 +62,7 @@ describe("registerSchema", () => {
       password: "weak",
       firstName: "John",
       lastName: "Doe",
+      child,
     });
     expect(result.success).toBe(false);
   });

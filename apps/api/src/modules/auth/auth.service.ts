@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import { prisma, Role, ScopeType, UserStatus } from "@schoolmart/db";
+import { prisma, Role, ScopeType, UserStatus, LinkStatus } from "@schoolmart/db";
 import { normalizeKenyaPhone } from "@schoolmart/shared";
 import type { RegisterInput, LoginInput } from "@schoolmart/shared";
 import { config } from "../../config.js";
@@ -25,7 +25,7 @@ function parseExpiresIn(expiresIn: string): number {
   return parseInt(num!, 10) * (multipliers[unit!] ?? 60);
 }
 
-export async function registerParent(input: RegisterInput, ctx: AuditContext): Promise<{ userId: string }> {
+export async function registerParent(input: RegisterInput, ctx: AuditContext): Promise<{ userId: string; linkId: string }> {
   if (input.email) {
     const existing = await prisma.user.findUnique({ where: { email: input.email } });
     if (existing) throw new ConflictError("Email already registered");
@@ -35,32 +35,67 @@ export async function registerParent(input: RegisterInput, ctx: AuditContext): P
     if (existing) throw new ConflictError("Phone already registered");
   }
 
+  const student = await prisma.student.findUnique({
+    where: {
+      schoolId_studentNumber: {
+        schoolId: input.child.schoolId,
+        studentNumber: input.child.studentNumber,
+      },
+    },
+  });
+  if (!student) throw new NotFoundError("Student not found at this school. Check the admission number.");
+
   const passwordHash = await hashPassword(input.password);
 
-  const user = await prisma.user.create({
-    data: {
-      email: input.email,
-      phoneE164: input.phone,
-      passwordHash,
-      firstName: input.firstName,
-      lastName: input.lastName,
-      status: UserStatus.ACTIVE,
-      emailVerifiedAt: input.email ? new Date() : undefined,
-      phoneVerifiedAt: input.phone ? new Date() : undefined,
-      roles: { create: { role: Role.PARENT, scopeType: ScopeType.PLATFORM } },
-      parentProfile: { create: {} },
-    },
+  const result = await prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        email: input.email,
+        phoneE164: input.phone,
+        passwordHash,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        status: UserStatus.ACTIVE,
+        emailVerifiedAt: input.email ? new Date() : undefined,
+        phoneVerifiedAt: input.phone ? new Date() : undefined,
+        roles: { create: { role: Role.PARENT, scopeType: ScopeType.PLATFORM } },
+        parentProfile: { create: {} },
+      },
+    });
+
+    const link = await tx.parentStudentLink.create({
+      data: {
+        parentUserId: user.id,
+        studentId: student.id,
+        relationship: input.child.relationship,
+        status: LinkStatus.PENDING_SCHOOL_APPROVAL,
+        claimedFirstName: input.child.firstName,
+        claimedLastName: input.child.lastName,
+        classTeacherName: input.child.classTeacherName,
+        consentedAt: new Date(),
+      },
+    });
+
+    return { user, link };
   });
 
   await writeAuditLog({
     action: "USER_REGISTERED",
     resourceType: "User",
-    resourceId: user.id,
-    metadata: { role: "PARENT" },
-    context: { ...ctx, actorUserId: user.id },
+    resourceId: result.user.id,
+    metadata: { role: "PARENT", linkId: result.link.id, studentId: student.id },
+    context: { ...ctx, actorUserId: result.user.id },
   });
 
-  return { userId: user.id };
+  await writeAuditLog({
+    action: "PARENT_LINK_REQUESTED",
+    resourceType: "ParentStudentLink",
+    resourceId: result.link.id,
+    metadata: { studentId: student.id, schoolId: input.child.schoolId, via: "register" },
+    context: { ...ctx, actorUserId: result.user.id },
+  });
+
+  return { userId: result.user.id, linkId: result.link.id };
 }
 
 export async function login(input: LoginInput, ctx: AuditContext): Promise<AuthTokens & { user: TokenPayload }> {

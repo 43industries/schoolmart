@@ -93,5 +93,61 @@ export type VendorStatus = (typeof VENDOR_STATUSES)[number];
 export const PRODUCT_STATUSES = ["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"] as const;
 export type ProductStatus = (typeof PRODUCT_STATUSES)[number];
 
+export const VENDOR_SELL_CATEGORIES = [
+  "MEALS_SNACKS",
+  "SCHOOL_SUPPLIES",
+  "PERSONAL_CARE",
+  "CARE_PACKAGES",
+  "EXAM_ESSENTIALS",
+  "CAMPUS_ESSENTIALS",
+] as const;
+export type VendorSellCategory = (typeof VENDOR_SELL_CATEGORIES)[number];
+
+export const VENDOR_TERMS_VERSION = "1.0";
+export const PLATFORM_AGREEMENT_VERSION = "1.0";
+
+export const WALLET_TX_TYPES = [
+  "CREDIT_FUND",
+  "DEBIT_SPEND",
+  "CREDIT_REFUND",
+  "ADJUSTMENT",
+] as const;
+export type WalletTxType = (typeof WALLET_TX_TYPES)[number];
+
+export const WALLET_RULE_PERIODS = ["DAILY", "WEEKLY", "MONTHLY"] as const;
+export type WalletRulePeriod = (typeof WALLET_RULE_PERIODS)[number];
+
+export const WALLET_RULE_CATEGORIES = [
+  "ALL",
+  "MEALS_SNACKS",
+  "SCHOOL_SUPPLIES",
+  "PERSONAL_CARE",
+  "CARE_PACKAGES",
+  "EXAM_ESSENTIALS",
+  "CAMPUS_ESSENTIALS",
+] as const;
+export type WalletRuleCategory = (typeof WALLET_RULE_CATEGORIES)[number];
+
+export const ACTIVITY_CATEGORIES = [
+  "FUNKIES",
+  "SPORTS",
+  "TRIP",
+  "CLUB",
+  "ACADEMIC",
+  "OTHER",
+] as const;
+export type ActivityCategory = (typeof ACTIVITY_CATEGORIES)[number];
+
+export const ACTIVITY_STATUSES = ["DRAFT", "PUBLISHED", "CLOSED", "CANCELLED"] as const;
+export type ActivityStatus = (typeof ACTIVITY_STATUSES)[number];
+
+export const ACTIVITY_REGISTRATION_STATUSES = [
+  "PENDING_PARENT",
+  "CONFIRMED",
+  "CANCELLED",
+  "REJECTED",
+] as const;
+export type ActivityRegistrationStatus = (typeof ACTIVITY_REGISTRATION_STATUSES)[number];
+
 export const DEFAULT_TIMEZONE = "Africa/Nairobi";
 export const DEFAULT_CURRENCY = "KES";
