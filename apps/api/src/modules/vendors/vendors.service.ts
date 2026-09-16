@@ -108,6 +108,7 @@ export async function registerVendor(input: RegisterVendorInput, ctx: AuditConte
         county: input.county,
         town: input.town,
         addressLine: input.addressLine,
+        branchNetwork: input.branchNetwork,
         sellCategories: input.sellCategories,
         termsVersion: VENDOR_TERMS_VERSION,
         termsAcceptedAt: now,

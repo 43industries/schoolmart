@@ -131,6 +131,13 @@ enum DeliveryBatchStatus {
   CANCELLED
 }
 
+enum DeliveryPartnerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
 enum NotificationChannel {
   IN_APP
   EMAIL
@@ -213,6 +220,7 @@ model User {
   sessions           Session[]
   parentProfile      ParentProfile?
   ownedVendors       Vendor[]            @relation("VendorOwner")
+  ownedDeliveryPartners DeliveryPartner[] @relation("DeliveryPartnerOwner")
   auditLogs          AuditLog[]
   approvedLinks      ParentStudentLink[] @relation("ApprovedBy")
   passwordResetTokens PasswordResetToken[]
@@ -361,6 +369,7 @@ model ParentStudentLink {
   status            LinkStatus   @default(PENDING_SCHOOL_APPROVAL)
   claimedFirstName  String?      @map("claimed_first_name")
   claimedLastName   String?      @map("claimed_last_name")
+  claimedGrade      String?      @map("claimed_grade")
   classTeacherName  String?      @map("class_teacher_name")
   consentedAt       DateTime?    @map("consented_at")
   approvedByUserId  String?      @map("approved_by_user_id")
@@ -423,6 +432,7 @@ model Vendor {
   town               String?
   addressLine        String?      @map("address_line")
   sellCategories     Json         @default("[]") @map("sell_categories")
+  branchNetwork      String?      @map("branch_network")
   termsVersion       String?      @map("terms_version")
   termsAcceptedAt    DateTime?    @map("terms_accepted_at")
   agreementVersion   String?      @map("agreement_version")
@@ -756,6 +766,25 @@ model DeliveryBatch {
   @@index([schoolId])
   @@index([deliveryDate])
   @@map("delivery_batches")
+}
+
+model DeliveryPartner {
+  id            String                @id @default(uuid())
+  ownerUserId   String                @map("owner_user_id")
+  status        DeliveryPartnerStatus @default(PENDING)
+  county        String
+  town          String
+  serviceTowns  String                @map("service_towns")
+  vehicleTypes  Json                  @default("[]") @map("vehicle_types")
+  termsAcceptedAt DateTime?           @map("terms_accepted_at")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+
+  owner User @relation("DeliveryPartnerOwner", fields: [ownerUserId], references: [id])
+
+  @@index([ownerUserId])
+  @@index([status])
+  @@map("delivery_partners")
 }
 
 model Notification {

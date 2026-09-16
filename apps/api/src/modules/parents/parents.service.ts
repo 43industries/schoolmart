@@ -26,6 +26,7 @@ export async function linkChild(parentUserId: string, input: LinkChildInput, ctx
       status: LinkStatus.PENDING_SCHOOL_APPROVAL,
       claimedFirstName: input.firstName,
       claimedLastName: input.lastName,
+      claimedGrade: input.grade,
       classTeacherName: input.classTeacherName,
       consentedAt: new Date(),
     },

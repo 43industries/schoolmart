@@ -5,11 +5,11 @@ import { Card } from "@/components/ui/card";
 import { Check, Store, MapPin, Package, FileText } from "lucide-react";
 
 const benefits = [
-  "List a wide range of products — meals, snacks, stationery, care packages and more",
-  "Set your service location and reach parents whose children are on campus",
-  "Aggregate orders and complete last man delivery to school collection points",
-  "Parents order, pay and track — you fulfil with clear demand",
-  "Accept vendor terms and grow with a trusted ecommerce channel",
+  "List a wide range of school items — meals, snacks, stationery, care packages and more",
+  "Confirm your branch network across the country so parents can find you",
+  "Receive and aggregate parent orders, then coordinate delivery to schools",
+  "Work with SchoolMart’s last-mile delivery agents for campus drop-off",
+  "Accept vendor terms and grow sales with a trusted ecommerce channel",
 ];
 
 const categories = [
@@ -29,13 +29,14 @@ export default function VendorsHomePage() {
         <section className="px-4 py-16">
           <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2">
             <div>
-              <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-brand-teal">For Vendors</p>
+              <p className="mb-3 text-sm font-semibold tracking-wide text-brand-teal">For vendors</p>
               <h1 className="mb-4 text-4xl font-bold tracking-tight text-brand-ink md:text-5xl">
-                Aggregate demand. Deliver to school. Grow with SchoolMart.
+                Receive and Aggregate Orders, Coordinate Delivery to Schools, Grow Your Sales with SchoolMart.
               </h1>
               <p className="mb-6 text-lg text-brand-muted">
-                SchoolMart connects you to parents who need trusted ecommerce and last man delivery to campus.
-                You aggregate orders and deliver. Parents order, pay and track. Students collect securely.
+                SchoolMart connects you to parents who need trusted infrastructure to order, track and deliver
+                school supplies to their children in school. You receive orders, aggregate and deliver to schools
+                working with trusted SchoolMart’s Last-Mile Delivery Agents.
               </p>
               <div className="mb-8 flex flex-col gap-3 sm:flex-row">
                 <Button href="/vendors/register">Become a vendor</Button>
@@ -64,8 +65,8 @@ export default function VendorsHomePage() {
             <div className="grid gap-6 md:grid-cols-3">
               {[
                 { icon: Store, title: "Sell a range of goods", desc: "Offer multiple categories like a modern marketplace — not a single product line." },
-                { icon: MapPin, title: "Serve by location", desc: "Share where you operate so parents near your delivery catchments can find you." },
-                { icon: Package, title: "Last man delivery", desc: "Batch and deliver to school collection points. Students collect securely on campus." },
+                { icon: MapPin, title: "Branch network", desc: "Share branches and towns nationwide so parents near your catchments can find you." },
+                { icon: Package, title: "Aggregate & deliver", desc: "Receive orders, batch them, and hand off to last-mile agents for school collection points." },
               ].map((item) => (
                 <Card key={item.title}>
                   <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-teal/10">

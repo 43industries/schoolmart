@@ -71,6 +71,7 @@ export async function registerParent(input: RegisterInput, ctx: AuditContext): P
         status: LinkStatus.PENDING_SCHOOL_APPROVAL,
         claimedFirstName: input.child.firstName,
         claimedLastName: input.child.lastName,
+        claimedGrade: input.child.grade,
         classTeacherName: input.child.classTeacherName,
         consentedAt: new Date(),
       },

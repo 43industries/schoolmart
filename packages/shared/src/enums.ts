@@ -149,5 +149,11 @@ export const ACTIVITY_REGISTRATION_STATUSES = [
 ] as const;
 export type ActivityRegistrationStatus = (typeof ACTIVITY_REGISTRATION_STATUSES)[number];
 
+export const VEHICLE_TYPES = ["CANTER", "PICKUP", "VAN", "BODA"] as const;
+export type VehicleType = (typeof VEHICLE_TYPES)[number];
+
+export const DELIVERY_PARTNER_STATUSES = ["PENDING", "APPROVED", "REJECTED", "SUSPENDED"] as const;
+export type DeliveryPartnerStatus = (typeof DELIVERY_PARTNER_STATUSES)[number];
+
 export const DEFAULT_TIMEZONE = "Africa/Nairobi";
 export const DEFAULT_CURRENCY = "KES";

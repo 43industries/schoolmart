@@ -132,6 +132,7 @@ export const authApi = {
       lastName: string;
       schoolId: string;
       studentNumber: string;
+      grade: string;
       classTeacherName: string;
       relationship: string;
     };
@@ -164,6 +165,14 @@ export const vendorsApi = {
     ),
 };
 
+export const deliveriesApi = {
+  register: (data: Record<string, unknown>) =>
+    api<{ success: boolean; userId: string; partnerId: string; status: string; message: string }>(
+      "/deliveries/register",
+      { method: "POST", body: data },
+    ),
+};
+
 export const schoolsApi = {
   list: () => api<{ schools: School[] }>("/schools"),
   get: (id: string) => api<School>(`/schools/${id}`),
@@ -176,6 +185,7 @@ export const parentsApi = {
     lastName: string;
     schoolId: string;
     studentNumber: string;
+    grade: string;
     classTeacherName: string;
     relationship: string;
   }) => api<ParentLink>("/parents/children/link", { method: "POST", body: data }),

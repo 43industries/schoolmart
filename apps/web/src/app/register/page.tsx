@@ -29,6 +29,7 @@ export default function RegisterPage() {
     childFirstName: "",
     childLastName: "",
     schoolId: "",
+    grade: "",
     studentNumber: "",
     classTeacherName: "",
     relationship: "MOTHER",
@@ -55,6 +56,7 @@ export default function RegisterPage() {
           firstName: form.childFirstName,
           lastName: form.childLastName,
           schoolId: form.schoolId,
+          grade: form.grade,
           studentNumber: form.studentNumber,
           classTeacherName: form.classTeacherName,
           relationship: form.relationship,
@@ -93,7 +95,7 @@ export default function RegisterPage() {
           </div>
           <Card>
             <CardHeader>
-              <CardTitle>Create parent account</CardTitle>
+              <CardTitle>Create Parent Account</CardTitle>
               <CardDescription>
                 Register and link your child so you can track deliveries to school.
               </CardDescription>
@@ -101,28 +103,28 @@ export default function RegisterPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
-              <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted">Your details</p>
+              <p className="text-sm font-semibold text-brand-ink">Your Details</p>
               <div className="grid grid-cols-2 gap-3">
-                <Input label="First name" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} required />
-                <Input label="Last name" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} required />
+                <Input label="First Name" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} required />
+                <Input label="Last Name" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} required />
               </div>
               <Input label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
               <Input label="Phone (Kenya)" type="tel" placeholder="0712345678" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-              <p className="text-xs text-brand-muted">Provide email or phone (at least one required)</p>
+              <p className="text-sm text-brand-muted">Provide email or phone (at least one required)</p>
               <Input label="Password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
 
               <div className="border-t border-gray-100 pt-4">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-muted">Your child at school</p>
+                <p className="mb-3 text-sm font-semibold text-brand-ink">Your Children at School</p>
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <Input
-                      label="Child first name"
+                      label="Child First Name"
                       value={form.childFirstName}
                       onChange={(e) => setForm({ ...form, childFirstName: e.target.value })}
                       required
                     />
                     <Input
-                      label="Child last name"
+                      label="Child Last Name"
                       value={form.childLastName}
                       onChange={(e) => setForm({ ...form, childLastName: e.target.value })}
                       required
@@ -136,20 +138,27 @@ export default function RegisterPage() {
                     required
                   />
                   <Input
-                    label="Admission number"
+                    label="Level / Grade / Class"
+                    value={form.grade}
+                    onChange={(e) => setForm({ ...form, grade: e.target.value })}
+                    placeholder="e.g. Form 2 / Grade 6 / Class 4B"
+                    required
+                  />
+                  <Input
+                    label="Admission Number"
                     value={form.studentNumber}
                     onChange={(e) => setForm({ ...form, studentNumber: e.target.value })}
                     placeholder="As shown on school records"
                     required
                   />
                   <Input
-                    label="Class teacher name"
+                    label="Class Teacher Name"
                     value={form.classTeacherName}
                     onChange={(e) => setForm({ ...form, classTeacherName: e.target.value })}
                     required
                   />
                   <Select
-                    label="Your relationship"
+                    label="Your Relationship"
                     value={form.relationship}
                     onChange={(e) => setForm({ ...form, relationship: e.target.value })}
                     options={relationships}

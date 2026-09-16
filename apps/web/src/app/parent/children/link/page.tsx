@@ -34,6 +34,7 @@ export default function LinkChildPage() {
     firstName: "",
     lastName: "",
     schoolId: "",
+    grade: "",
     studentNumber: "",
     classTeacherName: "",
     relationship: "MOTHER",
@@ -84,13 +85,13 @@ export default function LinkChildPage() {
               {error && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
               <div className="grid grid-cols-2 gap-3">
                 <Input
-                  label="Child first name"
+                  label="Child First Name"
                   value={form.firstName}
                   onChange={(e) => setForm({ ...form, firstName: e.target.value })}
                   required
                 />
                 <Input
-                  label="Child last name"
+                  label="Child Last Name"
                   value={form.lastName}
                   onChange={(e) => setForm({ ...form, lastName: e.target.value })}
                   required
@@ -104,20 +105,27 @@ export default function LinkChildPage() {
                 required
               />
               <Input
-                label="Admission number"
+                label="Level / Grade / Class"
+                value={form.grade}
+                onChange={(e) => setForm({ ...form, grade: e.target.value })}
+                placeholder="e.g. Form 2 / Grade 6 / Class 4B"
+                required
+              />
+              <Input
+                label="Admission Number"
                 value={form.studentNumber}
                 onChange={(e) => setForm({ ...form, studentNumber: e.target.value })}
                 placeholder="As shown on school records"
                 required
               />
               <Input
-                label="Class teacher name"
+                label="Class Teacher Name"
                 value={form.classTeacherName}
                 onChange={(e) => setForm({ ...form, classTeacherName: e.target.value })}
                 required
               />
               <Select
-                label="Relationship"
+                label="Your Relationship"
                 value={form.relationship}
                 onChange={(e) => setForm({ ...form, relationship: e.target.value })}
                 options={relationships}

@@ -11,6 +11,7 @@ export function MarketingHeader() {
           <Link href="/how-it-works" className="text-sm font-medium text-brand-muted hover:text-brand-teal">How it works</Link>
           <Link href="/for-parents" className="text-sm font-medium text-brand-muted hover:text-brand-teal">For Parents</Link>
           <Link href="/vendors" className="text-sm font-medium text-brand-muted hover:text-brand-teal">For Vendors</Link>
+          <Link href="/deliveries" className="text-sm font-medium text-brand-muted hover:text-brand-teal">Deliveries</Link>
           <Link href="/faq" className="text-sm font-medium text-brand-muted hover:text-brand-teal">FAQ</Link>
         </nav>
         <div className="flex items-center gap-4">
@@ -43,6 +44,7 @@ export function MarketingFooter() {
               <li><Link href="/how-it-works" className="hover:text-brand-teal">How it works</Link></li>
               <li><Link href="/for-parents" className="hover:text-brand-teal">For Parents</Link></li>
               <li><Link href="/vendors" className="hover:text-brand-teal">For Vendors</Link></li>
+              <li><Link href="/deliveries" className="hover:text-brand-teal">Deliveries</Link></li>
             </ul>
           </div>
           <div>
@@ -56,12 +58,15 @@ export function MarketingFooter() {
           <div>
             <h4 className="mb-3 font-semibold text-brand-ink">Get started</h4>
             <p className="mb-4 text-sm text-brand-muted">
-              Parents order, pay and track. Vendors aggregate and deliver.
+              Parents pay, order and track. Vendors aggregate and deliver. Last-mile agents deliver to campus.
             </p>
             <div className="flex flex-col gap-2 sm:items-start">
               <Button href="/register">Create parent account</Button>
               <Link href="/vendors" className="text-sm font-semibold text-brand-teal hover:underline">
                 Become a vendor →
+              </Link>
+              <Link href="/deliveries" className="text-sm font-semibold text-brand-teal hover:underline">
+                Join as a delivery agent →
               </Link>
             </div>
           </div>

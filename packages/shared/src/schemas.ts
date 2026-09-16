@@ -12,6 +12,7 @@ import {
   WALLET_RULE_PERIODS,
   ACTIVITY_CATEGORIES,
   ACTIVITY_STATUSES,
+  VEHICLE_TYPES,
 } from "./enums.js";
 
 export const emailSchema = z.string().email().toLowerCase();
@@ -41,6 +42,7 @@ export const childOnboardingSchema = z.object({
   schoolId: z.string().uuid(),
   /** Admission number — unique with school, not a global DB primary key */
   studentNumber: z.string().min(1).max(50),
+  grade: z.string().min(1).max(50),
   classTeacherName: z.string().min(1).max(150),
   relationship: z.enum(RELATIONSHIPS),
 });
@@ -128,30 +130,26 @@ export const updateVendorSchema = createVendorSchema.partial().extend({
   status: z.enum(VENDOR_STATUSES).optional(),
 });
 
-export const registerVendorSchema = z
-  .object({
-    businessName: z.string().min(2).max(200),
-    firstName: z.string().min(1).max(100),
-    lastName: z.string().min(1).max(100),
-    email: emailSchema.optional(),
-    phone: phoneSchema.optional(),
-    password: passwordSchema,
-    description: z.string().max(2000).optional(),
-    county: z.string().min(2).max(100),
-    town: z.string().min(2).max(100),
-    addressLine: z.string().max(300).optional(),
-    sellCategories: z.array(z.enum(VENDOR_SELL_CATEGORIES)).min(1, "Select at least one category"),
-    acceptVendorTerms: z.literal(true, {
-      errorMap: () => ({ message: "You must accept the vendor terms" }),
-    }),
-    acceptPlatformAgreement: z.literal(true, {
-      errorMap: () => ({ message: "You must accept the platform agreement" }),
-    }),
-  })
-  .refine((data) => data.email || data.phone, {
-    message: "Email or phone is required",
-    path: ["email"],
-  });
+export const registerVendorSchema = z.object({
+  businessName: z.string().min(2).max(200),
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  email: emailSchema,
+  phone: phoneSchema,
+  password: passwordSchema,
+  description: z.string().max(2000).optional(),
+  branchNetwork: z.string().min(1).max(2000),
+  county: z.string().min(2).max(100),
+  town: z.string().min(2).max(100),
+  addressLine: z.string().max(300).optional(),
+  sellCategories: z.array(z.enum(VENDOR_SELL_CATEGORIES)).min(1, "Select at least one category"),
+  acceptVendorTerms: z.literal(true, {
+    errorMap: () => ({ message: "You must accept the vendor terms" }),
+  }),
+  acceptPlatformAgreement: z.literal(true, {
+    errorMap: () => ({ message: "You must accept the platform agreement" }),
+  }),
+});
 
 export const createCategorySchema = z.object({
   name: z.string().min(1).max(100),
@@ -304,6 +302,21 @@ export const confirmActivityRegistrationSchema = z.object({
   registrationId: z.string().uuid(),
 });
 
+export const registerDeliveryPartnerSchema = z.object({
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  email: emailSchema,
+  phone: phoneSchema,
+  password: passwordSchema,
+  county: z.string().min(2).max(100),
+  town: z.string().min(2).max(100),
+  serviceTowns: z.string().min(2).max(2000),
+  vehicleTypes: z.array(z.enum(VEHICLE_TYPES)).min(1, "Select at least one vehicle type"),
+  acceptTerms: z.literal(true, {
+    errorMap: () => ({ message: "You must accept the delivery partner terms" }),
+  }),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
@@ -335,3 +348,4 @@ export type CreateActivityInput = z.infer<typeof createActivitySchema>;
 export type UpdateActivityInput = z.infer<typeof updateActivitySchema>;
 export type RegisterActivityInput = z.infer<typeof registerActivitySchema>;
 export type ConfirmActivityRegistrationInput = z.infer<typeof confirmActivityRegistrationSchema>;
+export type RegisterDeliveryPartnerInput = z.infer<typeof registerDeliveryPartnerSchema>;

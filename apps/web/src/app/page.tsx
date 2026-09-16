@@ -16,16 +16,16 @@ export default function HomePage() {
               <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-brand-teal">
                 Parent-funded and tracked deliveries to schools
               </p>
-              <h1 className="text-4xl font-bold leading-[1.1] tracking-tight text-brand-ink md:text-5xl lg:text-[3.25rem]">
+              <h1 className="text-3xl font-bold leading-[1.15] tracking-tight text-brand-ink md:text-4xl lg:text-[2.75rem]">
                 The{" "}
                 <span className="text-brand-teal">easiest way</span>{" "}
-                to send meals, essentials &amp; care packages to your child at school
+                to buy and send school items, essentials, meals, and special packages to your child at school
               </h1>
               <p className="mt-6 max-w-lg text-lg leading-relaxed text-brand-muted">
-                SchoolMart is seamless infrastructure that lets parents purchase anything and deliver it to their children at school — through trusted ecommerce and last man delivery.
+                SchoolMart provides seamless infrastructure that enables parents to purchase anything and deliver it fast and safely to their children at school.
               </p>
               <p className="mt-4 max-w-lg text-base font-medium text-brand-ink">
-                Vendors aggregate and deliver. Parents order, pay and track. Students collect securely.
+                Parents pay, order, and track. Vendors aggregate and deliver. Students collect safely at school.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <Button href="/register">Get Started as a Parent</Button>
@@ -53,15 +53,15 @@ export default function HomePage() {
           <div className="mx-auto max-w-5xl">
             <h2 className="mb-3 text-center text-3xl font-bold text-brand-ink">How SchoolMart works</h2>
             <p className="mx-auto mb-12 max-w-xl text-center text-brand-muted">
-              Vendors aggregate and deliver. Parents order, pay and track. Students collect securely.
+              Parents pay, order, and track. Vendors aggregate and deliver. Students collect safely at school.
             </p>
             <div className="grid gap-4 md:grid-cols-5">
               {[
-                { icon: Store, label: "Vendors", desc: "Aggregate & deliver" },
+                { icon: MapPin, label: "Parents", desc: "Pay, Order, and Track" },
                 { icon: ArrowRight, label: "", desc: "", className: "hidden md:flex items-center justify-center" },
-                { icon: MapPin, label: "Parents", desc: "Order, pay & track" },
+                { icon: Store, label: "Vendors", desc: "Aggregate & Deliver" },
                 { icon: ArrowRight, label: "", desc: "", className: "hidden md:flex items-center justify-center" },
-                { icon: Package, label: "Students", desc: "Collect securely" },
+                { icon: Package, label: "Students", desc: "Collect Safely At School" },
               ].filter((s) => s.label !== "" || s.className).map((step, i) => (
                 step.className ? (
                   <div key={i} className={step.className}>
@@ -115,7 +115,7 @@ export default function HomePage() {
           <div className="mx-auto max-w-3xl rounded-[2rem] bg-brand-teal px-8 py-12 text-center text-white shadow-lg shadow-brand-teal/20">
             <h2 className="text-3xl font-bold">Ready to deliver to your child at school?</h2>
             <p className="mt-4 text-white/90">
-              Parents order, pay and track. Vendors aggregate and deliver. Students collect securely.
+              Parents pay, order, and track. Vendors aggregate and deliver. Students collect safely at school.
             </p>
             <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
               <Button href="/register" className="!bg-white !text-brand-teal hover:!bg-white/90">
