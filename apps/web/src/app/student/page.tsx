@@ -130,6 +130,25 @@ export default function StudentPortalPage() {
     }
   };
 
+  const handleBuyWithWallet = async (productId: string) => {
+    setError("");
+    setMessage("");
+    setBusy(true);
+    try {
+      const result = await studentsApi.checkout({ productId, quantity: 1 });
+      if (result.status === "PAID" && result.order) {
+        setMessage(`Paid from wallet · Order ${result.order.orderNumber}`);
+      } else {
+        setMessage(result.message ?? "Waiting for parent approval");
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Checkout failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleRegisterActivity = async (activityId: string) => {
     setError("");
     setMessage("");
@@ -212,7 +231,7 @@ export default function StudentPortalPage() {
             Campus shop
           </CardTitle>
           <CardDescription>
-            Browse approved products and request items — your parent reviews and pays from your wallet.
+            Buy with your wallet when parent rules allow, or send a request for your parent to review.
           </CardDescription>
         </CardHeader>
         {products.length === 0 ? (
@@ -240,9 +259,14 @@ export default function StudentPortalPage() {
                     </p>
                   </div>
                 </div>
-                <Button type="button" variant="secondary" disabled={busy} onClick={() => handleRequest(p.id)}>
-                  Request
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" disabled={busy} onClick={() => handleBuyWithWallet(p.id)}>
+                    Buy with wallet
+                  </Button>
+                  <Button type="button" variant="secondary" disabled={busy} onClick={() => handleRequest(p.id)}>
+                    Request
+                  </Button>
+                </div>
               </div>
               );
             })}

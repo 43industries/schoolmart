@@ -84,8 +84,17 @@ export const PAYMENT_STATUSES = [
 ] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
-export const PAYMENT_METHODS = ["MPESA", "CARD", "WALLET"] as const;
+export const PAYMENT_METHODS = ["MPESA", "CARD", "BANK", "WALLET", "OTHER"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export const PAYMENT_PURPOSES = ["FUND_WALLET", "ORDER_CHECKOUT"] as const;
+export type PaymentPurpose = (typeof PAYMENT_PURPOSES)[number];
+
+export const FUNDING_METHODS = ["MPESA", "CARD", "BANK", "OTHER"] as const;
+export type FundingMethod = (typeof FUNDING_METHODS)[number];
+
+export const CHECKOUT_METHODS = ["WALLET", "MPESA", "CARD", "BANK"] as const;
+export type CheckoutMethod = (typeof CHECKOUT_METHODS)[number];
 
 export const VENDOR_STATUSES = ["PENDING", "APPROVED", "SUSPENDED", "REJECTED"] as const;
 export type VendorStatus = (typeof VENDOR_STATUSES)[number];

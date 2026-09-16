@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, getPrimaryRole, getDashboardPath } from "@/lib/auth-context";
-import { walletsApi, ApiError, type ParentWalletSummary, type ParentWalletDetail } from "@/lib/api";
+import { walletsApi, paymentsApi, ApiError, type ParentWalletSummary, type ParentWalletDetail } from "@/lib/api";
 import { formatKES, toMinorUnits, WALLET_RULE_CATEGORIES, WALLET_RULE_PERIODS } from "@schoolmart/shared";
 import { PortalLayout } from "@/components/layout/portal-layout";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { PendingPaymentConfirm } from "@/components/payments/pending-payment-confirm";
 
 const navItems = [
   { href: "/parent", label: "Dashboard" },
@@ -38,6 +39,8 @@ export default function ParentWalletPage() {
   const [detail, setDetail] = useState<ParentWalletDetail | null>(null);
   const [fundAmount, setFundAmount] = useState("1000");
   const [fundPhone, setFundPhone] = useState("");
+  const [fundMethod, setFundMethod] = useState<"MPESA" | "CARD" | "BANK" | "OTHER">("MPESA");
+  const [pendingFund, setPendingFund] = useState<{ providerRef: string; hint: string } | null>(null);
   const [ruleForm, setRuleForm] = useState({
     category: "ALL",
     period: "WEEKLY",
@@ -122,21 +125,61 @@ export default function ParentWalletPage() {
     setError("");
     setMessage("");
     setBusy(true);
+    setPendingFund(null);
     try {
       const amountKes = Number(fundAmount);
       if (!Number.isFinite(amountKes) || amountKes <= 0) {
         setError("Enter a valid amount");
         return;
       }
+      if (fundMethod === "MPESA" && !fundPhone.trim()) {
+        setError("Enter an M-PESA phone number");
+        return;
+      }
       const result = await walletsApi.fund({
         studentId: selectedId,
         amountMinor: toMinorUnits(amountKes),
+        method: fundMethod,
         phone: fundPhone || undefined,
       });
-      setMessage(`Funded successfully. New balance: ${formatKES(result.balanceMinor)} (ref ${result.referenceId.slice(0, 18)}…)`);
-      await Promise.all([loadList(), loadDetail(selectedId)]);
+      if (result.requiresConfirmation && result.payment.providerRef) {
+        setPendingFund({
+          providerRef: result.payment.providerRef,
+          hint: result.instructions ?? "Confirm payment to credit the wallet.",
+        });
+        setMessage(`Payment ${result.payment.status.toLowerCase()} · ${result.payment.method}`);
+      } else if (typeof result.balanceMinor === "number") {
+        setMessage(`Funded successfully. New balance: ${formatKES(result.balanceMinor)}`);
+        await Promise.all([loadList(), loadDetail(selectedId)]);
+      } else {
+        setMessage(result.instructions ?? "Funding initiated");
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Funding failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleConfirmFund = async () => {
+    if (!pendingFund || !selectedId) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await paymentsApi.completeMock({
+        providerRef: pendingFund.providerRef,
+        status: "SUCCEEDED",
+      });
+      setPendingFund(null);
+      setMessage(
+        typeof result.balanceMinor === "number"
+          ? `Wallet credited. New balance: ${formatKES(result.balanceMinor)}`
+          : "Payment confirmed",
+      );
+      await Promise.all([loadList(), loadDetail(selectedId)]);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not confirm payment");
     } finally {
       setBusy(false);
     }
@@ -280,9 +323,20 @@ export default function ParentWalletPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle>Fund wallet</CardTitle>
-                    <CardDescription>Mock M-PESA top-up for development</CardDescription>
+                    <CardDescription>Top up via M-PESA, card, bank, or other (mock until live rails)</CardDescription>
                   </CardHeader>
                   <form onSubmit={handleFund} className="space-y-3">
+                    <Select
+                      label="Payment method"
+                      value={fundMethod}
+                      onChange={(e) => setFundMethod(e.target.value as typeof fundMethod)}
+                      options={[
+                        { value: "MPESA", label: "M-PESA" },
+                        { value: "CARD", label: "Card" },
+                        { value: "BANK", label: "Bank transfer" },
+                        { value: "OTHER", label: "Other" },
+                      ]}
+                    />
                     <Input
                       label="Amount (KES)"
                       type="number"
@@ -291,17 +345,29 @@ export default function ParentWalletPage() {
                       onChange={(e) => setFundAmount(e.target.value)}
                       required
                     />
-                    <Input
-                      label="M-PESA phone (optional)"
-                      type="tel"
-                      placeholder="0712345678"
-                      value={fundPhone}
-                      onChange={(e) => setFundPhone(e.target.value)}
-                    />
+                    {fundMethod === "MPESA" && (
+                      <Input
+                        label="M-PESA phone"
+                        type="tel"
+                        placeholder="0712345678"
+                        value={fundPhone}
+                        onChange={(e) => setFundPhone(e.target.value)}
+                        required
+                      />
+                    )}
                     <Button type="submit" disabled={busy}>
-                      {busy ? "Processing..." : "Fund now"}
+                      {busy ? "Processing..." : "Start funding"}
                     </Button>
                   </form>
+                  {pendingFund && (
+                    <div className="mt-4">
+                      <PendingPaymentConfirm
+                        hint={pendingFund.hint}
+                        busy={busy}
+                        onConfirm={handleConfirmFund}
+                      />
+                    </div>
+                  )}
                 </Card>
 
                 <Card>

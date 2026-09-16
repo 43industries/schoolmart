@@ -27,6 +27,7 @@ import {
   vendorCatalogRoutes,
 } from "./modules/vendors/vendors.routes.js";
 import { publicDeliveryRoutes } from "./modules/deliveries/deliveries.routes.js";
+import { paymentRoutes } from "./modules/payments/payments.routes.js";
 import { ensureUploadDirs, getUploadRoot, MAX_IMAGE_BYTES } from "./modules/uploads/uploads.service.js";
 
 const app = Fastify({
@@ -116,6 +117,7 @@ await app.register(async (v1) => {
   await v1.register(studentPortalRoutes, { prefix: "/students" });
   await v1.register(studentActivityRoutes, { prefix: "/students" });
   await v1.register(cartRoutes, { prefix: "/cart" });
+  await v1.register(paymentRoutes, { prefix: "/payments" });
   await v1.register(catalogRoutes, { prefix: "/catalog" });
   await v1.register(publicCatalogRoutes, { prefix: "/catalog" });
   await v1.register(publicVendorRoutes, { prefix: "/vendors" });

@@ -1,8 +1,7 @@
 import { prisma, LinkStatus } from "@schoolmart/db";
-import type { FundWalletInput, UpsertWalletRuleInput } from "@schoolmart/shared";
+import type { UpsertWalletRuleInput } from "@schoolmart/shared";
 import { ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { writeAuditLog, type AuditContext } from "../audit/audit.service.js";
-import { randomUUID } from "node:crypto";
 
 async function assertActiveParentLink(parentUserId: string, studentId: string) {
   const link = await prisma.parentStudentLink.findUnique({
@@ -117,58 +116,6 @@ export async function getParentWallet(parentUserId: string, studentId: string) {
       transactions: full.transactions,
       updatedAt: full.updatedAt,
     },
-  };
-}
-
-export async function fundWallet(parentUserId: string, input: FundWalletInput, ctx: AuditContext) {
-  await assertActiveParentLink(parentUserId, input.studentId);
-  const wallet = await ensureWalletForStudent(input.studentId);
-  const referenceId = `mock-mpesa-${randomUUID()}`;
-
-  const updated = await prisma.$transaction(async (tx) => {
-    const current = await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
-    const balanceAfter = current.balanceMinor + input.amountMinor;
-
-    const next = await tx.wallet.update({
-      where: { id: wallet.id },
-      data: { balanceMinor: balanceAfter },
-    });
-
-    const txRow = await tx.walletTransaction.create({
-      data: {
-        walletId: wallet.id,
-        type: "CREDIT_FUND",
-        amountMinor: input.amountMinor,
-        balanceAfterMinor: balanceAfter,
-        description: input.phone
-          ? `M-PESA top-up (mock) from ${input.phone}`
-          : "M-PESA top-up (mock)",
-        referenceId,
-      },
-    });
-
-    return { wallet: next, transaction: txRow };
-  });
-
-  await writeAuditLog({
-    action: "WALLET_FUNDED",
-    resourceType: "Wallet",
-    resourceId: wallet.id,
-    metadata: {
-      studentId: input.studentId,
-      amountMinor: input.amountMinor,
-      referenceId,
-      mock: true,
-    },
-    context: { ...ctx, actorUserId: parentUserId },
-  });
-
-  return {
-    balanceMinor: updated.wallet.balanceMinor,
-    currency: updated.wallet.currency,
-    transaction: updated.transaction,
-    provider: "MPESA_MOCK",
-    referenceId,
   };
 }
 

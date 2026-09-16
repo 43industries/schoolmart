@@ -1,10 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { addCartItemSchema, updateCartItemSchema, checkoutCartSchema } from "@schoolmart/shared";
 import { getCart, addCartItem, updateCartItem, clearCart } from "./cart.service.js";
-import { checkoutWithWallet } from "./checkout.service.js";
 import { authenticate, requireParent } from "../../middleware/auth.js";
 import { auditContextFromRequest } from "../audit/audit.service.js";
 import { ValidationError } from "../../lib/errors.js";
+import { createCheckoutIntent } from "../payments/payments.service.js";
 
 export async function cartRoutes(app: FastifyInstance) {
   app.get("/", { preHandler: [authenticate, requireParent()] }, async (req, reply) => {
@@ -31,11 +31,12 @@ export async function cartRoutes(app: FastifyInstance) {
   app.post("/checkout", { preHandler: [authenticate, requireParent()] }, async (req, reply) => {
     const parsed = checkoutCartSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError("Validation failed", parsed.error.flatten());
-    const result = await checkoutWithWallet(
+    const result = await createCheckoutIntent(
       req.user!.sub,
       parsed.data,
       auditContextFromRequest(req, req.user!.sub),
     );
-    return reply.status(result.status === "PAID" ? 201 : 202).send(result);
+    const paid = "status" in result && result.status === "PAID";
+    return reply.status(paid ? 201 : 202).send(result);
   });
 }

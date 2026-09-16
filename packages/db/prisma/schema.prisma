@@ -106,7 +106,14 @@ enum PaymentStatus {
 enum PaymentMethod {
   MPESA
   CARD
+  BANK
   WALLET
+  OTHER
+}
+
+enum PaymentPurpose {
+  FUND_WALLET
+  ORDER_CHECKOUT
 }
 
 enum VendorStatus {
@@ -628,23 +635,30 @@ model OrderStatusHistory {
 }
 
 model Payment {
-  id             String        @id @default(uuid())
-  orderId        String?       @map("order_id")
-  parentUserId   String        @map("parent_user_id")
-  amountMinor    Int           @map("amount_minor")
-  currency       String        @default("KES")
+  id             String         @id @default(uuid())
+  orderId        String?        @map("order_id")
+  parentUserId   String?        @map("parent_user_id")
+  studentId      String?        @map("student_id")
+  actorUserId    String?        @map("actor_user_id")
+  purpose        PaymentPurpose @default(ORDER_CHECKOUT)
+  amountMinor    Int            @map("amount_minor")
+  currency       String         @default("KES")
   method         PaymentMethod
-  status         PaymentStatus @default(PENDING)
-  providerRef    String?       @unique @map("provider_ref")
-  idempotencyKey String        @unique @map("idempotency_key")
-  metadata       Json          @default("{}")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
+  status         PaymentStatus  @default(PENDING)
+  provider       String         @default("mock")
+  providerRef    String?        @unique @map("provider_ref")
+  idempotencyKey String         @unique @map("idempotency_key")
+  phoneE164      String?        @map("phone_e164")
+  metadata       Json           @default("{}")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
 
   order Order? @relation(fields: [orderId], references: [id])
 
   @@index([parentUserId])
+  @@index([studentId])
   @@index([status])
+  @@index([purpose])
   @@map("payments")
 }
 

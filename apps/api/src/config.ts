@@ -11,4 +11,13 @@ export const config = {
   cookieSecret: process.env.COOKIE_SECRET ?? "dev-cookie-secret",
   webUrl: process.env.WEB_URL ?? "http://localhost:3000",
   isDev: (process.env.NODE_ENV ?? "development") === "development",
+  paymentsProvider: (process.env.PAYMENTS_PROVIDER ?? "mock") as "mock" | "mpesa",
+  mpesa: {
+    consumerKey: process.env.MPESA_CONSUMER_KEY ?? "",
+    consumerSecret: process.env.MPESA_CONSUMER_SECRET ?? "",
+    shortcode: process.env.MPESA_SHORTCODE ?? "",
+    passkey: process.env.MPESA_PASSKEY ?? "",
+    callbackUrl: process.env.MPESA_CALLBACK_URL ?? "",
+    env: (process.env.MPESA_ENV ?? "sandbox") as "sandbox" | "production",
+  },
 } as const;

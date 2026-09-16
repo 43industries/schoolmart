@@ -4,6 +4,7 @@ import {
   confirmCollectionSchema,
   studentProductRequestSchema,
   reviewStudentRequestSchema,
+  studentCheckoutSchema,
 } from "@schoolmart/shared";
 import { authenticate, requireStudent, requireParent } from "../../middleware/auth.js";
 import { auditContextFromRequest } from "../audit/audit.service.js";
@@ -21,6 +22,7 @@ import {
   listParentStudentRequests,
   reviewStudentProductRequest,
 } from "./students.requests.service.js";
+import { studentCheckoutWithWallet } from "./students.checkout.service.js";
 
 export async function publicStudentRoutes(app: FastifyInstance) {
   app.post("/activate", async (req, reply) => {
@@ -78,6 +80,17 @@ export async function studentPortalRoutes(app: FastifyInstance) {
       auditContextFromRequest(req, req.user!.sub),
     );
     return reply.status(201).send(request);
+  });
+
+  app.post("/me/checkout", { preHandler: [authenticate, requireStudent()] }, async (req, reply) => {
+    const parsed = studentCheckoutSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError("Validation failed", parsed.error.flatten());
+    const result = await studentCheckoutWithWallet(
+      req.user!.sub,
+      parsed.data,
+      auditContextFromRequest(req, req.user!.sub),
+    );
+    return reply.status(result.status === "PAID" ? 201 : 202).send(result);
   });
 }
 

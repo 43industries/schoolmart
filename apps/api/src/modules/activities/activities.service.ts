@@ -319,7 +319,9 @@ export async function studentSelfRegisterActivity(
   let confirmedAt: Date | undefined = new Date();
 
   if (activity.feeMinor > 0) {
-    const { evaluateWalletSpend, debitWalletSpend } = await import("../cart/checkout.service.js");
+    const { evaluateWalletSpend, debitWalletSpend } = await import(
+      "../wallets/wallet-spend.service.js",
+    );
     const evalResult = await evaluateWalletSpend(student.id, activity.feeMinor, "ALL");
     if (!evalResult.ok || evalResult.requiresApproval) {
       status = ActivityRegistrationStatus.PENDING_PARENT;

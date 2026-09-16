@@ -6,11 +6,11 @@ import { ValidationError } from "../../lib/errors.js";
 import {
   listParentWallets,
   getParentWallet,
-  fundWallet,
   upsertWalletRule,
   deleteWalletRule,
 } from "./wallets.service.js";
-import { listPendingSpendRequests, reviewWalletSpend } from "../cart/checkout.service.js";
+import { listPendingSpendRequests, reviewWalletSpend } from "./wallet-spend.service.js";
+import { createFundingIntent } from "../payments/payments.service.js";
 
 export async function walletRoutes(app: FastifyInstance) {
   app.get("/wallets", { preHandler: [authenticate, requireParent()] }, async (req, reply) => {
@@ -44,7 +44,7 @@ export async function walletRoutes(app: FastifyInstance) {
     const parsed = fundWalletSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError("Validation failed", parsed.error.flatten());
 
-    const result = await fundWallet(
+    const result = await createFundingIntent(
       req.user!.sub,
       parsed.data,
       auditContextFromRequest(req, req.user!.sub),

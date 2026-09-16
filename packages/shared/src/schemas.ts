@@ -13,6 +13,8 @@ import {
   ACTIVITY_CATEGORIES,
   ACTIVITY_STATUSES,
   VEHICLE_TYPES,
+  FUNDING_METHODS,
+  CHECKOUT_METHODS,
 } from "./enums.js";
 
 export const emailSchema = z.string().email().toLowerCase();
@@ -204,6 +206,8 @@ export const checkoutCartSchema = z.object({
   studentId: z.string().uuid(),
   schoolId: z.string().uuid(),
   notes: z.string().max(500).optional(),
+  paymentMethod: z.enum(CHECKOUT_METHODS).default("WALLET"),
+  phone: phoneSchema.optional(),
 });
 
 export const studentProductRequestSchema = z.object({
@@ -248,7 +252,19 @@ export const fundWalletSchema = z.object({
   studentId: z.string().uuid(),
   /** Amount in minor units (cents). e.g. 100000 = KSh 1,000 */
   amountMinor: z.number().int().positive().max(50_000_000),
+  method: z.enum(FUNDING_METHODS).default("MPESA"),
   phone: phoneSchema.optional(),
+});
+
+export const completePaymentSchema = z.object({
+  providerRef: z.string().min(1).max(200),
+  status: z.enum(["SUCCEEDED", "FAILED"]).default("SUCCEEDED"),
+});
+
+export const studentCheckoutSchema = z.object({
+  productId: z.string().uuid(),
+  quantity: z.number().int().min(1).max(99).default(1),
+  notes: z.string().max(500).optional(),
 });
 
 export const upsertWalletRuleSchema = z.object({
@@ -341,6 +357,8 @@ export type StudentProductRequestInput = z.infer<typeof studentProductRequestSch
 export type ReviewStudentRequestInput = z.infer<typeof reviewStudentRequestSchema>;
 export type ApproveWalletSpendInput = z.infer<typeof approveWalletSpendSchema>;
 export type FundWalletInput = z.infer<typeof fundWalletSchema>;
+export type CompletePaymentInput = z.infer<typeof completePaymentSchema>;
+export type StudentCheckoutInput = z.infer<typeof studentCheckoutSchema>;
 export type UpsertWalletRuleInput = z.infer<typeof upsertWalletRuleSchema>;
 export type ActivateStudentInput = z.infer<typeof activateStudentSchema>;
 export type ConfirmCollectionInput = z.infer<typeof confirmCollectionSchema>;

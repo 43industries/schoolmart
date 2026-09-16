@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
-import { cartApi, parentsApi, ApiError, type CartResponse, type ParentLink } from "@/lib/api";
+import { cartApi, parentsApi, paymentsApi, ApiError, type CartResponse, type ParentLink } from "@/lib/api";
 import { PortalLayout } from "@/components/layout/portal-layout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
+import { PendingPaymentConfirm } from "@/components/payments/pending-payment-confirm";
 import { formatKES } from "@schoolmart/shared";
 
 const navItems = [
@@ -21,12 +22,17 @@ const navItems = [
   { href: "/parent/settings", label: "Settings" },
 ];
 
+type PayMethod = "WALLET" | "MPESA" | "CARD" | "BANK";
+
 export default function CartPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [cart, setCart] = useState<CartResponse | null>(null);
   const [children, setChildren] = useState<ParentLink[]>([]);
   const [studentId, setStudentId] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PayMethod>("WALLET");
+  const [phone, setPhone] = useState("");
+  const [pendingPayment, setPendingPayment] = useState<{ providerRef: string; hint: string } | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -56,19 +62,59 @@ export default function CartPage() {
       setError("Select a child for this order");
       return;
     }
+    if (paymentMethod === "MPESA" && !phone.trim()) {
+      setError("Enter an M-PESA phone number");
+      return;
+    }
     setBusy(true);
     setError("");
     setMessage("");
+    setPendingPayment(null);
     try {
-      const result = await cartApi.checkout({ studentId, schoolId });
+      const result = await cartApi.checkout({
+        studentId,
+        schoolId,
+        paymentMethod,
+        phone: phone || undefined,
+      });
       if (result.status === "PAID" && result.order) {
-        setMessage(`Paid from wallet · Order ${result.order.orderNumber}`);
+        setMessage(`Paid · Order ${result.order.orderNumber}`);
         load();
+      } else if (result.status === "PENDING_PAYMENT" && result.payment?.providerRef) {
+        setPendingPayment({
+          providerRef: result.payment.providerRef,
+          hint: result.instructions ?? "Confirm payment to complete the order.",
+        });
+        setMessage(`Awaiting ${paymentMethod} payment for order ${result.order?.orderNumber ?? ""}`);
       } else {
         setMessage(result.message ?? "Checkout needs your approval on the Wallet page");
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Checkout failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!pendingPayment) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await paymentsApi.completeMock({
+        providerRef: pendingPayment.providerRef,
+        status: "SUCCEEDED",
+      });
+      setPendingPayment(null);
+      if (result.order) {
+        setMessage(`Paid · Order ${result.order.orderNumber}`);
+      } else {
+        setMessage("Payment confirmed");
+      }
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not confirm payment");
     } finally {
       setBusy(false);
     }
@@ -81,7 +127,9 @@ export default function CartPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-brand-ink">Cart</h2>
-          <p className="text-brand-muted">Checkout pays from the selected child&apos;s wallet under your spending rules.</p>
+          <p className="text-brand-muted">
+            Pay from the child wallet, or charge the order directly via M-PESA, card, or bank.
+          </p>
         </div>
         <Button href="/parent/shop" variant="secondary">Continue shopping</Button>
       </div>
@@ -137,7 +185,7 @@ export default function CartPage() {
             </div>
             {children.length > 0 ? (
               <Select
-                label="Pay from child wallet"
+                label="Child / school for this order"
                 value={studentId}
                 onChange={(e) => setStudentId(e.target.value)}
                 options={children.map((c) => ({
@@ -148,9 +196,36 @@ export default function CartPage() {
             ) : (
               <p className="text-sm text-brand-muted">Link and get school approval for a child before checkout.</p>
             )}
+            <Select
+              label="Pay with"
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value as PayMethod)}
+              options={[
+                { value: "WALLET", label: "Child wallet" },
+                { value: "MPESA", label: "M-PESA (direct)" },
+                { value: "CARD", label: "Card (direct)" },
+                { value: "BANK", label: "Bank (direct)" },
+              ]}
+            />
+            {paymentMethod === "MPESA" && (
+              <Input
+                label="M-PESA phone"
+                type="tel"
+                placeholder="0712345678"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            )}
             <Button type="button" disabled={busy || !studentId} onClick={handleCheckout}>
-              {busy ? "Processing…" : "Checkout with wallet"}
+              {busy ? "Processing…" : paymentMethod === "WALLET" ? "Checkout with wallet" : "Pay now"}
             </Button>
+            {pendingPayment && (
+              <PendingPaymentConfirm
+                hint={pendingPayment.hint}
+                busy={busy}
+                onConfirm={handleConfirmPayment}
+              />
+            )}
           </Card>
         </div>
       )}

@@ -233,13 +233,24 @@ export interface ParentWalletDetail extends ParentWalletSummary {
 export const walletsApi = {
   list: () => api<{ wallets: ParentWalletSummary[] }>("/parents/wallets"),
   get: (studentId: string) => api<ParentWalletDetail>(`/parents/wallets/${studentId}`),
-  fund: (data: { studentId: string; amountMinor: number; phone?: string }) =>
+  fund: (data: {
+    studentId: string;
+    amountMinor: number;
+    method?: "MPESA" | "CARD" | "BANK" | "OTHER";
+    phone?: string;
+  }) =>
     api<{
-      balanceMinor: number;
-      currency: string;
-      referenceId: string;
-      provider: string;
-      transaction: { id: string; amountMinor: number; balanceAfterMinor: number };
+      payment: {
+        id: string;
+        status: string;
+        method: string;
+        amountMinor: number;
+        provider: string;
+        providerRef: string | null;
+      };
+      instructions?: string;
+      balanceMinor?: number;
+      requiresConfirmation?: boolean;
     }>("/parents/wallets/fund", { method: "POST", body: data }),
   upsertRule: (data: {
     studentId: string;
@@ -263,7 +274,23 @@ export const walletsApi = {
       }>;
     }>("/parents/wallets/spend-requests"),
   reviewSpend: (data: { spendRequestId: string; action: "APPROVE" | "REJECT" }) =>
-    api<unknown>("/parents/wallets/spend-requests/review", { method: "POST", body: data }),
+    api<
+      | { id: string; status: string }
+      | {
+          status: "COMPLETED";
+          order: { id: string; orderNumber: string; totalMinor: number };
+        }
+    >("/parents/wallets/spend-requests/review", { method: "POST", body: data }),
+};
+
+export const paymentsApi = {
+  completeMock: (data: { providerRef: string; status?: "SUCCEEDED" | "FAILED" }) =>
+    api<{
+      payment: { id: string; status: string; providerRef: string | null; purpose: string };
+      balanceMinor?: number;
+      order?: { id: string; orderNumber: string; totalMinor: number; status: string };
+      alreadyFinal?: boolean;
+    }>("/payments/mock/complete", { method: "POST", body: data }),
 };
 
 export const adminApi = {
@@ -368,13 +395,28 @@ export const cartApi = {
     api<CartResponse>("/cart/items", { method: "POST", body: data }),
   updateItem: (itemId: string, quantity: number) =>
     api<CartResponse>(`/cart/items/${itemId}`, { method: "PATCH", body: { quantity } }),
-  checkout: (data: { studentId: string; schoolId: string; notes?: string }) =>
+  checkout: (data: {
+    studentId: string;
+    schoolId: string;
+    notes?: string;
+    paymentMethod?: "WALLET" | "MPESA" | "CARD" | "BANK";
+    phone?: string;
+  }) =>
     api<{
-      status: "PAID" | "PENDING_APPROVAL";
+      status: "PAID" | "PENDING_APPROVAL" | "PENDING_PAYMENT";
       order?: { id: string; orderNumber: string; totalMinor: number; status: string };
+      payment?: {
+        id: string;
+        status: string;
+        method: string;
+        providerRef: string | null;
+        amountMinor: number;
+      };
       spendRequestId?: string;
       amountMinor?: number;
       message?: string;
+      instructions?: string;
+      requiresConfirmation?: boolean;
     }>("/cart/checkout", { method: "POST", body: data }),
 };
 
@@ -532,6 +574,14 @@ export const studentsApi = {
     }>("/students/me/requests"),
   createRequest: (data: { productId: string; quantity?: number; note?: string }) =>
     api<{ id: string; status: string }>("/students/me/requests", { method: "POST", body: data }),
+  checkout: (data: { productId: string; quantity?: number; notes?: string }) =>
+    api<{
+      status: "PAID" | "PENDING_APPROVAL";
+      order?: { id: string; orderNumber: string; totalMinor: number; status: string };
+      spendRequestId?: string;
+      amountMinor?: number;
+      message?: string;
+    }>("/students/me/checkout", { method: "POST", body: data }),
 };
 
 export const parentRequestsApi = {
