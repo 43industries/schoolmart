@@ -27,10 +27,10 @@ export default function VendorsHomePage() {
       <MarketingHeader />
       <main>
         <section className="px-4 py-16">
-          <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2">
-            <div>
+          <div className="mx-auto grid max-w-6xl items-stretch gap-12 lg:grid-cols-2">
+            <div className="flex flex-col">
               <p className="mb-3 text-sm font-semibold tracking-wide text-brand-teal">For vendors</p>
-              <h1 className="mb-4 text-4xl font-bold tracking-tight text-brand-ink md:text-5xl">
+              <h1 className="mb-4 text-2xl font-bold tracking-tight text-brand-ink md:text-3xl">
                 Receive and Aggregate Orders, Coordinate Delivery to Schools, Grow Your Sales with SchoolMart.
               </h1>
               <p className="mb-6 text-lg text-brand-muted">
@@ -38,18 +38,18 @@ export default function VendorsHomePage() {
                 school supplies to their children in school. You receive orders, aggregate and deliver to schools
                 working with trusted SchoolMart’s Last-Mile Delivery Agents.
               </p>
-              <div className="mb-8 flex flex-col gap-3 sm:flex-row">
+              <div className="mt-auto flex flex-col gap-3 sm:flex-row">
                 <Button href="/vendors/register">Become a vendor</Button>
                 <Button variant="secondary" href="/how-it-works">See how it works</Button>
               </div>
             </div>
-            <div className="overflow-hidden rounded-[2rem] shadow-xl shadow-brand-teal/10">
+            <div className="min-h-[20rem] overflow-hidden rounded-[2rem] shadow-xl shadow-brand-teal/10 lg:min-h-0 lg:translate-x-2">
               <Image
                 src="/graphics/vendors.png"
                 alt="Vendor preparing orders for school delivery"
                 width={800}
-                height={600}
-                className="h-auto w-full object-cover"
+                height={900}
+                className="h-full w-full object-cover object-right"
                 priority
               />
             </div>
@@ -111,10 +111,12 @@ export default function VendorsHomePage() {
             <FileText className="mx-auto mb-4 h-10 w-10 text-brand-teal" />
             <h2 className="mb-3 text-2xl font-bold text-brand-ink">Vendor terms &amp; platform agreement</h2>
             <p className="mb-8 text-brand-muted">
-              Onboarding includes clear vendor terms and a platform agreement so everyone operates with trust —
-              parents, vendors, and students on campus.
+              To read Vendor Terms, Conditions and Platform Agreements before you register.
             </p>
-            <Button href="/vendors/register">Start vendor registration</Button>
+            <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Button href="/vendors/terms" variant="secondary">Read vendor terms</Button>
+              <Button href="/vendors/register">Start vendor registration</Button>
+            </div>
           </div>
         </section>
       </main>

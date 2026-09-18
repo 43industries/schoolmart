@@ -72,23 +72,24 @@ export default function RegisterPage() {
 
   return (
     <div className="flex min-h-screen">
-      <div className="relative hidden w-1/2 overflow-hidden bg-brand-surface lg:block">
+      <div className="relative hidden w-1/2 shrink-0 overflow-hidden bg-brand-surface lg:sticky lg:top-0 lg:block lg:h-screen">
         <Image
           src="/graphics/parents.png"
           alt="Parent using SchoolMart"
           fill
-          className="object-cover"
+          className="object-cover object-center"
           priority
+          sizes="50vw"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-        <div className="absolute bottom-10 left-10 right-10 text-white">
+        <div className="absolute bottom-10 left-10 right-10 max-w-md text-white">
           <p className="text-2xl font-bold">Order, pay, and track</p>
           <p className="mt-2 text-white/80">
             Link your child with school and admission number so every delivery is tracked to campus.
           </p>
         </div>
       </div>
-      <div className="flex w-full flex-col items-center justify-center px-4 py-12 lg:w-1/2">
+      <div className="flex w-full flex-col items-center justify-center px-4 py-12 lg:w-1/2 lg:overflow-y-auto">
         <div className="w-full max-w-lg">
           <div className="mb-8">
             <Logo size="lg" />

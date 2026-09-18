@@ -53,7 +53,7 @@ export default function HomePage() {
           <div className="mx-auto max-w-5xl">
             <h2 className="mb-3 text-center text-3xl font-bold text-brand-ink">How SchoolMart works</h2>
             <p className="mx-auto mb-12 max-w-xl text-center text-brand-muted">
-              Parents pay, order, and track. Vendors aggregate and deliver. Students collect safely at school.
+              Parents order, pay and track. Vendors aggregate and deliver. Students collect securely — parent-funded &amp; tracked deliveries to schools.
             </p>
             <div className="grid gap-4 md:grid-cols-5">
               {[

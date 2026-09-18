@@ -276,10 +276,24 @@ export default function ParentWalletPage() {
           <CardHeader>
             <CardTitle>No wallets yet</CardTitle>
             <CardDescription>
-              Wallets are created when the school approves a child link. Link a child and wait for approval.
+              Funding rails (M-PESA, card, bank, and other) and spending rules appear here once a child is linked
+              and the school has approved the link. Until then there is no wallet to load.
             </CardDescription>
           </CardHeader>
-          <Button href="/parent/children/link">Link a child</Button>
+          <div className="space-y-3 text-sm text-brand-muted">
+            <p>After approval you can:</p>
+            <ul className="list-inside list-disc space-y-1">
+              <li>Fund the child wallet from this page</li>
+              <li>Set spending limits and approval rules</li>
+              <li>Pay cart checkouts from wallet or pay the order directly</li>
+            </ul>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button href="/parent/children/link">Link a child</Button>
+            <Button href="/parent/children" variant="secondary">
+              View my children
+            </Button>
+          </div>
         </Card>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[240px_1fr]">

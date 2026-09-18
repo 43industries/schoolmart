@@ -168,8 +168,12 @@ export default function VendorRegisterPage() {
                   required
                 />
                 <span>
-                  I accept the <strong>Vendor Terms</strong> (version {VENDOR_TERMS_VERSION}), including fulfilment,
-                  delivery standards, and accurate catalog listings.
+                  I accept the{" "}
+                  <Link href="/vendors/terms" className="font-semibold text-brand-teal hover:underline" target="_blank">
+                    Vendor Terms
+                  </Link>{" "}
+                  (version {VENDOR_TERMS_VERSION}), including fulfilment, delivery standards, and accurate catalog
+                  listings.
                 </span>
               </label>
               <label className="flex items-start gap-3">
@@ -181,8 +185,11 @@ export default function VendorRegisterPage() {
                   required
                 />
                 <span>
-                  I accept the <strong>Platform Agreement</strong> (version {PLATFORM_AGREEMENT_VERSION}) governing
-                  fees, payouts, and use of SchoolMart.
+                  I accept the{" "}
+                  <Link href="/vendors/terms" className="font-semibold text-brand-teal hover:underline" target="_blank">
+                    Platform Agreement
+                  </Link>{" "}
+                  (version {PLATFORM_AGREEMENT_VERSION}) governing fees, payouts, and use of SchoolMart.
                 </span>
               </label>
             </div>

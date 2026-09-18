@@ -18,7 +18,7 @@ export function MarketingHeader() {
           <Link href="/login" className="text-sm font-medium text-brand-muted hover:text-brand-ink">
             Log in
           </Link>
-          <Button href="/register">Get Started</Button>
+          <Button href="/get-started">Get Started</Button>
         </div>
       </div>
     </header>
@@ -35,7 +35,7 @@ export function MarketingFooter() {
               <Logo href="/" />
             </div>
             <p className="text-sm text-brand-muted">
-              Seamless infrastructure for parents to purchase anything and deliver it to their children at school — trusted ecommerce and last man delivery.
+              Seamless infrastructure for parents to purchase anything and deliver it to their children at school — trusted ecommerce and last-mile delivery.
             </p>
           </div>
           <div>

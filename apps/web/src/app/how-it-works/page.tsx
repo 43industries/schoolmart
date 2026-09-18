@@ -21,8 +21,7 @@ export default function HowItWorksPage() {
           <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-brand-teal">The journey</p>
           <h1 className="mb-4 text-4xl font-bold tracking-tight text-brand-ink">How it works</h1>
           <p className="text-lg text-brand-muted">
-            Vendors aggregate and deliver. Parents order, pay and track. Students collect securely —
-            parent-funded and tracked deliveries to schools.
+            Parents order, pay and track. Vendors aggregate and deliver. Students collect securely — parent-funded &amp; tracked deliveries to schools.
           </p>
         </div>
         <div className="space-y-4">
