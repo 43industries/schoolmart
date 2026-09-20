@@ -7,11 +7,15 @@ const faqs = [
   },
   {
     q: "How does payment work?",
-    a: "You can pay via M-PESA, card, or a parent-controlled student wallet. All payments are verified by our backend — we never mark an order as paid based on frontend confirmation alone.",
+    a: "Parents can pay with the child wallet or pay the order directly via M-PESA, card, or bank. Wallet and direct payments are processed by SchoolMart — not sent straight to a vendor’s till. Vendors are settled according to platform terms after orders are fulfilled.",
   },
   {
     q: "What is the Student Wallet?",
-    a: "A parent-funded wallet linked to your child. You set spending limits and category rules. Your child cannot spend beyond what you allow.",
+    a: "A parent-funded wallet linked to your child. You top it up through SchoolMart, set spending limits and category rules, and your child cannot spend beyond what you allow. When a purchase uses the wallet, payment is made through SchoolMart.",
+  },
+  {
+    q: "Do vendors get paid into their own payment systems?",
+    a: "Parents pay SchoolMart (wallet or direct rails). SchoolMart records the order and settles vendors under the platform agreement — including future links into vendor payout systems. Checkout is not a peer-to-peer payment into each vendor’s separate app.",
   },
   {
     q: "How does my child collect their order?",

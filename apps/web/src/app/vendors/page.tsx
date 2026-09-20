@@ -35,8 +35,9 @@ export default function VendorsHomePage() {
               </h1>
               <p className="mb-6 text-lg text-brand-muted">
                 SchoolMart connects you to parents who need trusted infrastructure to order, track and deliver
-                school supplies to their children in school. You receive orders, aggregate and deliver to schools
-                working with trusted SchoolMart’s Last-Mile Delivery Agents.
+                school supplies to their children in school. Parents pay through SchoolMart (wallet or direct
+                rails); you receive and aggregate orders, then deliver to schools with SchoolMart’s last-mile
+                agents — settlement follows platform terms.
               </p>
               <div className="mt-auto flex flex-col gap-3 sm:flex-row">
                 <Button href="/vendors/register">Become a vendor</Button>

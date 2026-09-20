@@ -17,7 +17,7 @@ export function Logo({ href = "/", className, size = "md", showWordmark = true }
       <span className={cn("relative flex items-center justify-center rounded-xl bg-brand-teal font-bold text-white shadow-sm", markSize)}>
         SM
         <span
-          className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-brand-gold ring-2 ring-white"
+          className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-brand-ink ring-2 ring-white"
           aria-hidden
         />
       </span>
