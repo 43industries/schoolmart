@@ -284,6 +284,19 @@ export const walletsApi = {
 };
 
 export const paymentsApi = {
+  get: (id: string) =>
+    api<{
+      payment: {
+        id: string;
+        status: string;
+        provider: string;
+        providerRef: string | null;
+        purpose: string;
+        amountMinor: number;
+      };
+      balanceMinor?: number;
+      order?: { id: string; orderNumber: string; totalMinor: number; status: string };
+    }>(`/payments/${id}`),
   completeMock: (data: { providerRef: string; status?: "SUCCEEDED" | "FAILED" }) =>
     api<{
       payment: { id: string; status: string; providerRef: string | null; purpose: string };
@@ -305,6 +318,51 @@ export const adminApi = {
     api<Vendor>(`/admin/vendors/${id}`, { method: "PATCH", body: data }),
   createProduct: (data: Record<string, unknown>) =>
     api<Product>("/admin/products", { method: "POST", body: data }),
+  openPayouts: () =>
+    api<{
+      payables: Array<{
+        ledgerEntryId: string;
+        orderId: string;
+        orderNumber: string | null;
+        amountMinor: number;
+        currency: string;
+        createdAt: string;
+        vendor: {
+          id: string;
+          name: string;
+          payoutMpesaPhone: string | null;
+          payoutBankName: string | null;
+          payoutAccountName: string | null;
+          payoutAccountNumber: string | null;
+        } | null;
+      }>;
+      totalOpenMinor: number;
+    }>("/admin/payouts/open"),
+  payouts: () =>
+    api<{
+      payouts: Array<{
+        id: string;
+        vendorId: string;
+        amountMinor: number;
+        status: string;
+        orderIds: string[];
+        providerRef: string | null;
+        notes: string | null;
+        settledAt: string | null;
+        createdAt: string;
+        vendor: { id: string; name: string };
+      }>;
+    }>("/admin/payouts"),
+  settlePayout: (data: {
+    vendorId: string;
+    orderIds: string[];
+    providerRef?: string;
+    notes?: string;
+  }) =>
+    api<{ payout: { id: string; amountMinor: number; status: string } }>("/admin/payouts/settle", {
+      method: "POST",
+      body: data,
+    }),
 };
 
 export interface Vendor {
@@ -409,6 +467,7 @@ export const cartApi = {
         id: string;
         status: string;
         method: string;
+        provider: string;
         providerRef: string | null;
         amountMinor: number;
       };
@@ -443,7 +502,39 @@ export const schoolAdminApi = {
 };
 
 export const vendorApi = {
-  me: () => api<Vendor & { status: string; description?: string | null }>("/vendors/me"),
+  me: () =>
+    api<
+      Vendor & {
+        status: string;
+        description?: string | null;
+        payoutMpesaPhone?: string | null;
+        payoutBankName?: string | null;
+        payoutAccountName?: string | null;
+        payoutAccountNumber?: string | null;
+      }
+    >("/vendors/me"),
+  getPayout: () =>
+    api<{
+      id: string;
+      name: string;
+      payoutMpesaPhone: string | null;
+      payoutBankName: string | null;
+      payoutAccountName: string | null;
+      payoutAccountNumber: string | null;
+    }>("/vendors/me/payout"),
+  updatePayout: (data: {
+    payoutMpesaPhone?: string | null;
+    payoutBankName?: string | null;
+    payoutAccountName?: string | null;
+    payoutAccountNumber?: string | null;
+  }) =>
+    api<{
+      id: string;
+      payoutMpesaPhone: string | null;
+      payoutBankName: string | null;
+      payoutAccountName: string | null;
+      payoutAccountNumber: string | null;
+    }>("/vendors/me/payout", { method: "PATCH", body: data }),
   products: () => api<{ products: Product[] }>("/vendors/me/products"),
   createProduct: (data: Record<string, unknown>) =>
     api<Product>("/vendors/me/products", { method: "POST", body: data }),
@@ -637,6 +728,220 @@ export interface ParentActivitiesResponse {
     }>;
   }>;
 }
+
+export interface OrderTimelineEntry {
+  id: string;
+  fromStatus: string | null;
+  toStatus: string;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface OrderLine {
+  id: string;
+  productName: string;
+  quantity: number;
+  totalMinor: number;
+}
+
+export interface ParentOrder {
+  id: string;
+  orderNumber: string;
+  status: string;
+  totalMinor: number;
+  createdAt: string;
+  updatedAt: string;
+  refundedMinor: number;
+  canCancel: boolean;
+  items: OrderLine[];
+  vendor: { id: string; name: string } | null;
+  school: { id: string; name: string; town: string };
+  student: { id: string; firstName: string; lastName: string; studentNumber: string; grade: string };
+  statusHistory: OrderTimelineEntry[];
+  payments: Array<{ id: string; method: string; status: string; provider: string }>;
+  deliveryBatch: { batchNumber: string; status: string; pickedUpAt: string | null; deliveredAt: string | null } | null;
+}
+
+export interface VendorOrder {
+  id: string;
+  orderNumber: string;
+  status: string;
+  totalMinor: number;
+  createdAt: string;
+  notes: string | null;
+  items: OrderLine[];
+  school: { id: string; name: string; town: string };
+  student: { firstName: string; lastName: string; studentNumber: string; grade: string };
+}
+
+export interface SchoolOrder {
+  id: string;
+  orderNumber: string;
+  status: string;
+  totalMinor: number;
+  updatedAt: string;
+  uncollected?: boolean;
+  items?: OrderLine[];
+  vendor: { id: string; name: string } | null;
+  student: { id: string; firstName: string; lastName: string; studentNumber: string; grade: string };
+  deliveryBatch?: {
+    batchNumber: string;
+    status: string;
+    deliveryPartner: { owner: { firstName: string; lastName: string; phoneE164: string | null } } | null;
+  } | null;
+}
+
+export interface DriverJob {
+  school: { id: string; name: string; town: string; county: string };
+  orderCount: number;
+  pickups: Array<{ id: string; name: string; town: string | null; addressLine: string | null; contactPhone: string | null }>;
+}
+
+export interface DriverBatch {
+  id: string;
+  batchNumber: string;
+  status: string;
+  orderCount: number;
+  pickedUpAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+  school: { id: string; name: string; town: string; county: string; addressLine: string | null };
+  orders: Array<{
+    id: string;
+    orderNumber: string;
+    status: string;
+    vendor: { id: string; name: string; town: string | null; addressLine: string | null; contactPhone: string | null } | null;
+    items: Array<{ productName: string; quantity: number }>;
+  }>;
+}
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export const notificationsApi = {
+  list: () => api<{ notifications: AppNotification[]; unread: number }>("/notifications"),
+  readAll: () => api<{ success: boolean }>("/notifications/read-all", { method: "POST" }),
+  read: (id: string) => api<{ success: boolean }>(`/notifications/${id}/read`, { method: "POST" }),
+};
+
+export const ordersApi = {
+  mine: () => api<{ orders: ParentOrder[] }>("/orders/mine"),
+  cancelMine: (id: string) =>
+    api<{ status: string; refundedMinor: number }>(`/orders/mine/${id}/cancel`, { method: "POST" }),
+  vendor: (view: "active" | "history" = "active") =>
+    api<{ orders: VendorOrder[] }>(`/orders/vendor?view=${view}`),
+  vendorSetStatus: (id: string, status: "VENDOR_ACCEPTED" | "PREPARING" | "READY_FOR_DISPATCH") =>
+    api<{ id: string; status: string }>(`/orders/vendor/${id}/status`, { method: "POST", body: { status } }),
+  vendorReject: (id: string, reason: string) =>
+    api<{ amountMinor: number }>(`/orders/vendor/${id}/reject`, { method: "POST", body: { reason } }),
+  school: (schoolId: string) =>
+    api<{
+      incoming: SchoolOrder[];
+      received: SchoolOrder[];
+      ready: SchoolOrder[];
+      recentlyCollected: SchoolOrder[];
+    }>(`/orders/school/${schoolId}`),
+  schoolReceive: (schoolId: string, orderIds: string[]) =>
+    api<{ moved: string[] }>(`/orders/school/${schoolId}/receive`, { method: "POST", body: { orderIds } }),
+  schoolReady: (schoolId: string, orderIds: string[]) =>
+    api<{ moved: string[] }>(`/orders/school/${schoolId}/ready`, { method: "POST", body: { orderIds } }),
+  schoolHandover: (schoolId: string, orderId: string, collectionPin: string) =>
+    api<{ id: string; status: string }>(`/orders/school/${schoolId}/handover/${orderId}`, {
+      method: "POST",
+      body: { collectionPin },
+    }),
+  driverMe: () =>
+    api<{
+      id: string;
+      status: string;
+      town: string;
+      county: string;
+      serviceTowns: string;
+      owner: { firstName: string; lastName: string; phoneE164: string | null };
+    }>("/orders/driver/me"),
+  driverJobs: () => api<{ jobs: DriverJob[] }>("/orders/driver/jobs"),
+  driverAccept: (schoolId: string) =>
+    api<{ id: string; batchNumber: string; orderCount: number }>("/orders/driver/jobs/accept", {
+      method: "POST",
+      body: { schoolId },
+    }),
+  driverBatches: () => api<{ batches: DriverBatch[] }>("/orders/driver/batches"),
+  driverPickup: (id: string) => api<{ id: string; status: string }>(`/orders/driver/batches/${id}/pickup`, { method: "POST" }),
+  driverDeliver: (id: string, data: { recipientName: string; notes?: string }) =>
+    api<{ id: string; status: string }>(`/orders/driver/batches/${id}/deliver`, { method: "POST", body: data }),
+  driverFail: (id: string, reason: string) =>
+    api<{ id: string; status: string }>(`/orders/driver/batches/${id}/fail`, { method: "POST", body: { reason } }),
+};
+
+export interface AdminOrder {
+  id: string;
+  orderNumber: string;
+  status: string;
+  totalMinor: number;
+  createdAt: string;
+  vendor: { id: string; name: string } | null;
+  school: { id: string; name: string };
+  student: { firstName: string; lastName: string };
+  payments: Array<{ method: string; status: string; provider: string }>;
+}
+
+export interface AdminPayment {
+  id: string;
+  purpose: string;
+  method: string;
+  status: string;
+  amountMinor: number;
+  provider: string;
+  providerRef: string | null;
+  phoneE164: string | null;
+  metadata: { receipt?: string; needsReview?: boolean; reviewReason?: string; failureReason?: string; completedVia?: string };
+  createdAt: string;
+  order: { id: string; orderNumber: string; status: string } | null;
+}
+
+export interface AdminDeliveryPartner {
+  id: string;
+  status: string;
+  county: string;
+  town: string;
+  serviceTowns: string;
+  vehicleTypes: string[];
+  createdAt: string;
+  owner: { id: string; firstName: string; lastName: string; email: string | null; phoneE164: string | null };
+  _count: { batches: number };
+}
+
+export const adminOpsApi = {
+  orders: (params: { status?: string; q?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.q) qs.set("q", params.q);
+    return api<{ orders: AdminOrder[] }>(`/admin/orders?${qs}`);
+  },
+  refund: (id: string, data: { amountMinor?: number; reason: string }) =>
+    api<{ amountMinor: number; full: boolean; refundedTotalMinor: number }>(`/admin/orders/${id}/refund`, {
+      method: "POST",
+      body: data,
+    }),
+  payments: (params: { status?: string; needsReview?: boolean } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.needsReview) qs.set("needsReview", "true");
+    return api<{ payments: AdminPayment[] }>(`/admin/payments?${qs}`);
+  },
+  reconcile: () =>
+    api<{ checked: number; succeeded: number; failed: number; stillOpen: number }>("/admin/payments/reconcile", {
+      method: "POST",
+    }),
+  deliveryPartners: () => api<{ partners: AdminDeliveryPartner[] }>("/admin/delivery-partners"),
+  setDeliveryPartnerStatus: (id: string, status: "APPROVED" | "REJECTED" | "SUSPENDED" | "PENDING") =>
+    api<{ id: string; status: string }>(`/admin/delivery-partners/${id}`, { method: "PATCH", body: { status } }),
+};
 
 export const activitiesApi = {
   listForParent: () => api<ParentActivitiesResponse>("/parents/activities"),

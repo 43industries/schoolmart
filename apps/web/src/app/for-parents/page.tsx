@@ -9,7 +9,7 @@ const benefits = [
   "Pay securely and track every delivery to campus",
   "Fund a parent-controlled student wallet with spending rules",
   "Get confirmation when your child collects securely",
-  "Shop from vendors who aggregate and complete last man delivery",
+  "Shop from vendors who aggregate and complete last-mile delivery",
   "One place for parent-funded and tracked deliveries to schools",
 ];
 
@@ -26,7 +26,7 @@ export default function ForParentsPage() {
             </h1>
             <p className="mb-8 text-lg text-brand-muted">
               SchoolMart lets you purchase anything and deliver it to your child at school through trusted ecommerce
-              and last man delivery. Vendors aggregate and deliver. You order, pay and track. Your child collects securely.
+              and last-mile delivery. Vendors aggregate and deliver. You order, pay and track. Your child collects securely.
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               {benefits.map((item) => (

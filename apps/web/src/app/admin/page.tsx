@@ -4,18 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, getPrimaryRole, getDashboardPath } from "@/lib/auth-context";
 import { adminApi } from "@/lib/api";
+import { adminNavItems } from "@/lib/admin-nav";
 import { PortalLayout } from "@/components/layout/portal-layout";
 import { Card } from "@/components/ui/card";
 import { School, Users, FileText } from "lucide-react";
-
-const navItems = [
-  { href: "/admin", label: "Dashboard" },
-  { href: "/admin/schools", label: "Schools" },
-  { href: "/admin/vendors", label: "Vendors" },
-  { href: "/admin/products", label: "Products" },
-  { href: "/admin/audit-logs", label: "Audit Logs" },
-  { href: "/admin/settings", label: "Settings" },
-];
 
 export default function AdminDashboard() {
   const { user, loading } = useAuth();
@@ -36,7 +28,7 @@ export default function AdminDashboard() {
   if (loading || !user) return null;
 
   return (
-    <PortalLayout title="Super Admin" navItems={navItems}>
+    <PortalLayout title="Super Admin" navItems={adminNavItems}>
       <div className="mb-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
         <h2 className="text-2xl font-bold text-brand-ink">Platform Dashboard</h2>
         <p className="mt-1 text-brand-muted">Manage schools, users, and platform settings.</p>

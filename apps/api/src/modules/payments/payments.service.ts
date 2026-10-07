@@ -5,6 +5,7 @@ import {
   PaymentMethod,
   PaymentPurpose,
   PaymentStatus,
+  type Prisma,
 } from "@schoolmart/db";
 import type {
   CheckoutCartInput,
@@ -13,6 +14,11 @@ import type {
   FundingMethod,
   FundWalletInput,
 } from "@schoolmart/shared";
+import { formatKES } from "@schoolmart/shared";
+import { notifyUser } from "../notifications/notifications.service.js";
+import { creditStudentWallet } from "../wallets/wallet-credit.service.js";
+import { mpesaChargedMinor } from "./providers/mpesa.js";
+import { reconcilePayment } from "./payments.reconcile.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../../lib/errors.js";
 import { writeAuditLog, type AuditContext } from "../audit/audit.service.js";
 import { clearCart } from "../cart/cart.service.js";
@@ -90,37 +96,14 @@ async function creditWalletForFunding(payment: {
   phoneE164: string | null;
 }) {
   if (!payment.studentId) throw new ValidationError("Funding payment missing student");
-  const ref = payment.providerRef ?? payment.id;
-  const existing = await prisma.walletTransaction.findFirst({
-    where: { referenceId: ref, type: "CREDIT_FUND" },
+  const result = await creditStudentWallet({
+    studentId: payment.studentId,
+    amountMinor: payment.amountMinor,
+    type: "CREDIT_FUND",
+    description: `${payment.method} top-up${payment.phoneE164 ? ` from ${payment.phoneE164}` : ""}`,
+    referenceId: payment.providerRef ?? payment.id,
   });
-  if (existing) {
-    const wallet = await ensureWalletForStudent(payment.studentId);
-    return { balanceMinor: wallet.balanceMinor, alreadyCredited: true as const };
-  }
-
-  const wallet = await ensureWalletForStudent(payment.studentId);
-  const updated = await prisma.$transaction(async (tx) => {
-    const current = await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
-    const balanceAfter = current.balanceMinor + payment.amountMinor;
-    const next = await tx.wallet.update({
-      where: { id: wallet.id },
-      data: { balanceMinor: balanceAfter },
-    });
-    await tx.walletTransaction.create({
-      data: {
-        walletId: wallet.id,
-        type: "CREDIT_FUND",
-        amountMinor: payment.amountMinor,
-        balanceAfterMinor: balanceAfter,
-        description: `${payment.method} top-up${payment.phoneE164 ? ` from ${payment.phoneE164}` : ""}`,
-        referenceId: ref,
-      },
-    });
-    return next;
-  });
-
-  return { balanceMinor: updated.balanceMinor, alreadyCredited: false as const };
+  return { balanceMinor: result.balanceMinor, alreadyCredited: !result.credited };
 }
 
 export async function createFundingIntent(
@@ -274,97 +257,286 @@ export async function createCheckoutIntent(
   };
 }
 
-export async function completeIntent(input: CompletePaymentInput, ctx: AuditContext) {
+export type CompleteIntentInput = CompletePaymentInput & {
+  /** Amount the provider says was paid; verified against the intent when present. */
+  amountMinor?: number;
+  receipt?: string;
+  reason?: string;
+  source?: "mock" | "webhook" | "reconcile" | "timeout" | "parent_cancel";
+};
+
+function metadataObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? { ...(value as Record<string, unknown>) }
+    : {};
+}
+
+function expectedProviderAmount(payment: { provider: string; method: PaymentMethod; amountMinor: number }) {
+  return payment.provider === "mpesa" && payment.method === PaymentMethod.MPESA
+    ? mpesaChargedMinor(payment.amountMinor)
+    : payment.amountMinor;
+}
+
+const OPEN_PAYMENT_STATUSES: PaymentStatus[] = [PaymentStatus.PENDING, PaymentStatus.PROCESSING];
+const PAYABLE_ORDER_STATUSES: OrderStatus[] = [OrderStatus.PENDING_PAYMENT, OrderStatus.PAYMENT_PROCESSING];
+
+export async function completeIntent(input: CompleteIntentInput, ctx: AuditContext) {
   const payment = await prisma.payment.findFirst({
     where: { providerRef: input.providerRef },
     include: { order: true },
   });
   if (!payment) throw new NotFoundError("Payment not found");
 
-  if (payment.status === PaymentStatus.SUCCEEDED || payment.status === PaymentStatus.FAILED) {
-    return {
-      payment: serializePayment(payment),
-      alreadyFinal: true as const,
-    };
+  if (!OPEN_PAYMENT_STATUSES.includes(payment.status)) {
+    return { payment: serializePayment(payment), alreadyFinal: true as const };
   }
 
-  if (input.status === "FAILED") {
-    const failed = await prisma.payment.update({
-      where: { id: payment.id },
-      data: { status: PaymentStatus.FAILED },
+  let outcome: "SUCCEEDED" | "FAILED" = input.status;
+  let reviewReason: string | undefined;
+
+  if (outcome === "SUCCEEDED" && input.amountMinor !== undefined) {
+    const expected = expectedProviderAmount(payment);
+    if (input.amountMinor !== expected) {
+      outcome = "FAILED";
+      reviewReason = `Amount mismatch: expected ${expected}, provider reported ${input.amountMinor}`;
+    }
+  }
+
+  if (outcome === "SUCCEEDED" && input.receipt) {
+    const duplicate = await prisma.payment.findFirst({
+      where: {
+        id: { not: payment.id },
+        metadata: { path: ["receipt"], equals: input.receipt },
+      },
+      select: { id: true },
     });
-    if (payment.orderId && payment.order?.status === OrderStatus.PENDING_PAYMENT) {
-      await prisma.order.update({
-        where: { id: payment.orderId },
-        data: { status: OrderStatus.CANCELLED },
-      });
-      await prisma.orderStatusHistory.create({
-        data: {
-          orderId: payment.orderId,
-          fromStatus: OrderStatus.PENDING_PAYMENT,
-          toStatus: OrderStatus.CANCELLED,
-          actorUserId: payment.actorUserId,
-          note: "Payment failed",
-        },
+    if (duplicate) {
+      outcome = "FAILED";
+      reviewReason = `Receipt ${input.receipt} already applied to payment ${duplicate.id}`;
+    }
+  }
+
+  const metadata = metadataObject(payment.metadata);
+  if (input.receipt) metadata.receipt = input.receipt;
+  if (input.amountMinor !== undefined) metadata.providerAmountMinor = input.amountMinor;
+  if (input.source) metadata.completedVia = input.source;
+  if (input.reason) metadata.failureReason = input.reason;
+  if (reviewReason) {
+    metadata.needsReview = true;
+    metadata.reviewReason = reviewReason;
+  }
+
+  // Claim the payment atomically so concurrent webhook + reconcile calls apply it once.
+  const claimed = await prisma.payment.updateMany({
+    where: { id: payment.id, status: { in: OPEN_PAYMENT_STATUSES } },
+    data: {
+      status: outcome === "SUCCEEDED" ? PaymentStatus.SUCCEEDED : PaymentStatus.FAILED,
+      metadata: metadata as Prisma.InputJsonValue,
+    },
+  });
+  const updated = await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+  if (claimed.count === 0) {
+    return { payment: serializePayment(updated), alreadyFinal: true as const };
+  }
+
+  if (outcome === "FAILED") {
+    if (payment.orderId && payment.order && PAYABLE_ORDER_STATUSES.includes(payment.order.status)) {
+      await prisma.$transaction(async (tx) => {
+        await tx.order.update({
+          where: { id: payment.orderId! },
+          data: { status: OrderStatus.CANCELLED },
+        });
+        await tx.orderStatusHistory.create({
+          data: {
+            orderId: payment.orderId!,
+            fromStatus: payment.order!.status,
+            toStatus: OrderStatus.CANCELLED,
+            actorUserId: payment.actorUserId,
+            note: input.reason ?? reviewReason ?? "Payment failed",
+          },
+        });
       });
     }
+    await notifyUser({
+      userId: payment.parentUserId,
+      title: "Payment not completed",
+      body: payment.order
+        ? `Payment for order ${payment.order.orderNumber} did not complete${input.reason ? ` (${input.reason})` : ""}.`
+        : `Your ${payment.method} wallet top-up did not complete${input.reason ? ` (${input.reason})` : ""}.`,
+      metadata: { paymentId: payment.id, orderId: payment.orderId },
+    });
     await writeAuditLog({
-      action: "PAYMENT_FAILED",
+      action: reviewReason ? "PAYMENT_FLAGGED_FOR_REVIEW" : "PAYMENT_FAILED",
       resourceType: "Payment",
       resourceId: payment.id,
+      metadata: { source: input.source, reason: input.reason ?? reviewReason },
       context: ctx,
     });
-    return { payment: serializePayment(failed), alreadyFinal: false as const };
+    return { payment: serializePayment(updated), alreadyFinal: false as const };
   }
-
-  const succeeded = await prisma.payment.update({
-    where: { id: payment.id },
-    data: { status: PaymentStatus.SUCCEEDED },
-  });
 
   let balanceMinor: number | undefined;
   let orderResult: { id: string; orderNumber: string; totalMinor: number; status: string } | undefined;
 
   if (payment.purpose === PaymentPurpose.FUND_WALLET) {
-    const credited = await creditWalletForFunding(succeeded);
+    const credited = await creditWalletForFunding(updated);
     balanceMinor = credited.balanceMinor;
-  } else if (payment.purpose === PaymentPurpose.ORDER_CHECKOUT && payment.orderId) {
-    const order = await finalizeDirectOrderPayment(
-      payment.orderId,
-      payment.actorUserId ?? payment.parentUserId,
-    );
-    if (payment.parentUserId) {
+    await notifyUser({
+      userId: payment.parentUserId,
+      title: "Wallet funded",
+      body: `${formatKES(payment.amountMinor)} was added to your child's wallet.`,
+      metadata: { paymentId: payment.id, studentId: payment.studentId },
+    });
+  } else if (payment.purpose === PaymentPurpose.ORDER_CHECKOUT && payment.orderId && payment.order) {
+    const finalized = await finalizeOrSalvage(payment, ctx);
+    orderResult = finalized.order;
+    balanceMinor = finalized.balanceMinor;
+    if (finalized.paid && payment.parentUserId) {
       await clearCart(payment.parentUserId);
     }
-    orderResult = {
-      id: order.id,
-      orderNumber: order.orderNumber,
-      totalMinor: order.totalMinor,
-      status: order.status,
-    };
   }
 
   await writeAuditLog({
     action: "PAYMENT_SUCCEEDED",
     resourceType: "Payment",
     resourceId: payment.id,
-    metadata: { purpose: payment.purpose, orderId: payment.orderId },
+    metadata: { purpose: payment.purpose, orderId: payment.orderId, source: input.source },
     context: ctx,
   });
 
   return {
-    payment: serializePayment(succeeded),
+    payment: serializePayment(updated),
     balanceMinor,
     order: orderResult,
     alreadyFinal: false as const,
   };
 }
 
+/**
+ * Money arrived for an order. Mark it PAID; if the order can no longer be paid
+ * (cancelled, timed out, stock problem) credit the child's wallet instead so funds are never lost.
+ */
+async function finalizeOrSalvage(
+  payment: {
+    id: string;
+    orderId: string | null;
+    studentId: string | null;
+    parentUserId: string | null;
+    actorUserId: string | null;
+    amountMinor: number;
+    order: { id: string; orderNumber: string; totalMinor: number; status: OrderStatus } | null;
+  },
+  ctx: AuditContext,
+) {
+  const order = payment.order!;
+  if (PAYABLE_ORDER_STATUSES.includes(order.status)) {
+    try {
+      const paid = await finalizeDirectOrderPayment(order.id, payment.actorUserId ?? payment.parentUserId);
+      await notifyUser({
+        userId: payment.parentUserId,
+        title: "Order paid",
+        body: `Order ${paid.orderNumber} is paid and has been sent to the vendor.`,
+        metadata: { orderId: paid.id },
+      });
+      return {
+        paid: true,
+        order: { id: paid.id, orderNumber: paid.orderNumber, totalMinor: paid.totalMinor, status: paid.status },
+        balanceMinor: undefined,
+      };
+    } catch (err) {
+      await writeAuditLog({
+        action: "ORDER_FINALIZE_FAILED",
+        resourceType: "Order",
+        resourceId: order.id,
+        metadata: { paymentId: payment.id, error: (err as Error).message },
+        context: ctx,
+      });
+    }
+  }
+
+  const studentId = payment.studentId;
+  let balanceMinor: number | undefined;
+  if (studentId) {
+    const credited = await creditStudentWallet({
+      studentId,
+      amountMinor: payment.amountMinor,
+      type: "CREDIT_REFUND",
+      description: `Payment for ${order.orderNumber} received after the order closed — credited to wallet`,
+      referenceId: `late-payment-${payment.id}`,
+    });
+    balanceMinor = credited.balanceMinor;
+  }
+  await writeAuditLog({
+    action: "PAYMENT_LATE_CREDITED_TO_WALLET",
+    resourceType: "Payment",
+    resourceId: payment.id,
+    metadata: { orderId: order.id, orderStatus: order.status, amountMinor: payment.amountMinor },
+    context: ctx,
+  });
+  await notifyUser({
+    userId: payment.parentUserId,
+    title: "Payment credited to wallet",
+    body: `We received ${formatKES(payment.amountMinor)} for order ${order.orderNumber}, but the order had already closed. The amount was added to your child's wallet.`,
+    metadata: { orderId: order.id, paymentId: payment.id },
+  });
+  return {
+    paid: false,
+    order: { id: order.id, orderNumber: order.orderNumber, totalMinor: order.totalMinor, status: order.status },
+    balanceMinor,
+  };
+}
+
 export async function handleProviderWebhook(providerName: string, body: unknown, ctx: AuditContext) {
-  const provider = getProviderByName(providerName) ?? getPaymentProvider();
-  if (!provider.parseWebhook) {
+  const provider = getProviderByName(providerName);
+  if (!provider?.parseWebhook) {
     throw new ValidationError(`Provider ${providerName} does not support webhooks`);
   }
   const parsed = await provider.parseWebhook(body);
-  return completeIntent({ providerRef: parsed.providerRef, status: parsed.status }, ctx);
+  return completeIntent(
+    {
+      providerRef: parsed.providerRef,
+      status: parsed.status,
+      amountMinor: parsed.amountMinor,
+      receipt: parsed.receipt,
+      reason: parsed.status === "FAILED" ? parsed.resultDesc : undefined,
+      source: "webhook",
+    },
+    ctx,
+  );
+}
+
+export async function getPaymentStatusForParent(parentUserId: string, paymentId: string) {
+  const current = await prisma.payment.findFirst({ where: { id: paymentId, parentUserId } });
+  if (!current) throw new NotFoundError("Payment not found");
+  await reconcilePayment(current);
+
+  const payment = await prisma.payment.findUniqueOrThrow({
+    where: { id: paymentId },
+    include: {
+      order: { select: { id: true, orderNumber: true, totalMinor: true, status: true } },
+    },
+  });
+
+  let balanceMinor: number | undefined;
+  if (
+    payment.purpose === PaymentPurpose.FUND_WALLET &&
+    payment.status === PaymentStatus.SUCCEEDED &&
+    payment.studentId
+  ) {
+    const wallet = await ensureWalletForStudent(payment.studentId);
+    balanceMinor = wallet.balanceMinor;
+  }
+
+  return {
+    payment: serializePayment(payment),
+    order: payment.order
+      ? {
+          id: payment.order.id,
+          orderNumber: payment.order.orderNumber,
+          totalMinor: payment.order.totalMinor,
+          status: payment.order.status,
+        }
+      : undefined,
+    balanceMinor,
+  };
 }

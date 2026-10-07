@@ -88,14 +88,14 @@ export default function HomePage() {
           <div className="mx-auto max-w-5xl">
             <h2 className="mb-3 text-center text-3xl font-bold text-brand-ink">Trusted ecommerce to the school gate</h2>
             <p className="mx-auto mb-12 max-w-xl text-center text-brand-muted">
-              Purchase what your child needs. Track every step. Deliver with last man delivery.
+              Purchase what your child needs. Track every step. Deliver with last-mile delivery.
             </p>
             <div className="grid gap-6 md:grid-cols-3">
               {[
                 { icon: Wallet, title: "Parent-controlled wallet", desc: "Fund your child's wallet with spending limits and category controls — you stay in charge." },
                 { icon: Package, title: "Anything to school", desc: "Meals, essentials, care packages and more — ordered online, delivered to campus." },
                 { icon: Shield, title: "Secure collection", desc: "PIN, QR code, or student ID verification so only your child collects." },
-                { icon: Truck, title: "Last man delivery", desc: "Vendors aggregate orders and complete delivery to the school collection point." },
+                { icon: Truck, title: "Last-mile delivery", desc: "Vendors aggregate orders and complete delivery to the school collection point." },
                 { icon: MapPin, title: "Full order tracking", desc: "Parents order, pay and track from checkout to collection confirmation." },
                 { icon: Store, title: "Multi-vendor marketplace", desc: "A range of vendors selling meals, supplies, personal care and campus essentials." },
               ].map((f) => (

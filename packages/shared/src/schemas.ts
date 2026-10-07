@@ -261,6 +261,20 @@ export const completePaymentSchema = z.object({
   status: z.enum(["SUCCEEDED", "FAILED"]).default("SUCCEEDED"),
 });
 
+export const updateVendorPayoutDestinationSchema = z.object({
+  payoutMpesaPhone: z.union([phoneSchema, z.literal(""), z.null()]).optional(),
+  payoutBankName: z.union([z.string().max(120), z.literal(""), z.null()]).optional(),
+  payoutAccountName: z.union([z.string().max(120), z.literal(""), z.null()]).optional(),
+  payoutAccountNumber: z.union([z.string().max(64), z.literal(""), z.null()]).optional(),
+});
+
+export const settleVendorPayoutSchema = z.object({
+  vendorId: z.string().uuid(),
+  orderIds: z.array(z.string().uuid()).min(1),
+  providerRef: z.string().max(120).optional(),
+  notes: z.string().max(1000).optional(),
+});
+
 export const studentCheckoutSchema = z.object({
   productId: z.string().uuid(),
   quantity: z.number().int().min(1).max(99).default(1),
@@ -358,6 +372,8 @@ export type ReviewStudentRequestInput = z.infer<typeof reviewStudentRequestSchem
 export type ApproveWalletSpendInput = z.infer<typeof approveWalletSpendSchema>;
 export type FundWalletInput = z.infer<typeof fundWalletSchema>;
 export type CompletePaymentInput = z.infer<typeof completePaymentSchema>;
+export type UpdateVendorPayoutDestinationInput = z.infer<typeof updateVendorPayoutDestinationSchema>;
+export type SettleVendorPayoutInput = z.infer<typeof settleVendorPayoutSchema>;
 export type StudentCheckoutInput = z.infer<typeof studentCheckoutSchema>;
 export type UpsertWalletRuleInput = z.infer<typeof upsertWalletRuleSchema>;
 export type ActivateStudentInput = z.infer<typeof activateStudentSchema>;

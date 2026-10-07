@@ -8,6 +8,7 @@ import { PortalLayout } from "@/components/layout/portal-layout";
 
 const navItems = [
   { href: "/school", label: "Dashboard" },
+  { href: "/school/deliveries", label: "Deliveries" },
   { href: "/school/students", label: "Students" },
   { href: "/school/parent-links", label: "Parent Links" },
   { href: "/school/activities", label: "Funkies" },

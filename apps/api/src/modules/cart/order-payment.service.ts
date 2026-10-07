@@ -7,6 +7,8 @@ import {
 } from "@schoolmart/db";
 import { AppError, NotFoundError } from "../../lib/errors.js";
 import { ensureWalletForStudent } from "../wallets/wallets.service.js";
+import { postVendorPayableForOrder } from "../payments/vendor-payable.service.js";
+import { notifyUser } from "../notifications/notifications.service.js";
 import { randomUUID } from "node:crypto";
 
 export type CartLine = {
@@ -137,6 +139,23 @@ export async function createPaidOrderFromLines(opts: {
       });
     }
 
+    await postVendorPayableForOrder(tx, {
+      id: created.id,
+      orderNumber: created.orderNumber,
+      vendorId: created.vendorId,
+      totalMinor: created.totalMinor,
+    });
+
+    await notifyUser(
+      {
+        userId: opts.parentUserId,
+        title: "Order paid",
+        body: `Order ${created.orderNumber} was paid from the wallet and sent to the vendor.`,
+        metadata: { orderId: created.id },
+      },
+      tx,
+    );
+
     return created;
   });
 }
@@ -245,6 +264,12 @@ export async function finalizeDirectOrderPayment(orderId: string, actorUserId?: 
         data: { availableQty: { decrement: item.quantity } },
       });
     }
+    await postVendorPayableForOrder(tx, {
+      id: updated.id,
+      orderNumber: updated.orderNumber,
+      vendorId: updated.vendorId,
+      totalMinor: updated.totalMinor,
+    });
     return updated;
   });
 }

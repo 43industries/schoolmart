@@ -8,6 +8,7 @@ import {
   updateProductSchema,
   vendorCreateProductSchema,
   vendorUpdateProductSchema,
+  updateVendorPayoutDestinationSchema,
 } from "@schoolmart/shared";
 import { listVendors, getVendor, createVendor, updateVendor, registerVendor } from "./vendors.service.js";
 import { listCategories, createCategory } from "../categories/categories.service.js";
@@ -29,6 +30,10 @@ import { ForbiddenError, ValidationError, AppError } from "../../lib/errors.js";
 import { VendorStatus, ProductStatus, prisma } from "@schoolmart/db";
 import type { TokenPayload } from "../auth/auth.service.js";
 import { saveProductImage } from "../uploads/uploads.service.js";
+import {
+  getVendorPayoutDestination,
+  updateVendorPayoutDestination,
+} from "../payments/vendor-payouts.service.js";
 
 export async function publicVendorRoutes(app: FastifyInstance) {
   app.post("/register", async (req, reply) => {
@@ -58,6 +63,23 @@ export async function vendorCatalogRoutes(app: FastifyInstance) {
     });
     if (!vendor) throw new ForbiddenError("Vendor not found");
     return reply.send(vendor);
+  });
+
+  app.patch("/me/payout", { preHandler: [authenticate, requireVendor()] }, async (req, reply) => {
+    const vendorId = resolveVendorId(req.user!);
+    const parsed = updateVendorPayoutDestinationSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError("Validation failed", parsed.error.flatten());
+    const result = await updateVendorPayoutDestination(
+      vendorId,
+      parsed.data,
+      auditContextFromRequest(req, req.user!.sub),
+    );
+    return reply.send(result);
+  });
+
+  app.get("/me/payout", { preHandler: [authenticate, requireVendor()] }, async (req, reply) => {
+    const vendorId = resolveVendorId(req.user!);
+    return reply.send(await getVendorPayoutDestination(vendorId));
   });
 
   app.get("/me/products", { preHandler: [authenticate, requireVendor()] }, async (req, reply) => {

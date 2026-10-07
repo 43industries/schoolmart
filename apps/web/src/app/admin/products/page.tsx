@@ -4,18 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { adminApi, type Product } from "@/lib/api";
+import { adminNavItems } from "@/lib/admin-nav";
 import { PortalLayout } from "@/components/layout/portal-layout";
 import { Card } from "@/components/ui/card";
 import { formatKES } from "@schoolmart/shared";
-
-const navItems = [
-  { href: "/admin", label: "Dashboard" },
-  { href: "/admin/schools", label: "Schools" },
-  { href: "/admin/vendors", label: "Vendors" },
-  { href: "/admin/products", label: "Products" },
-  { href: "/admin/audit-logs", label: "Audit Logs" },
-  { href: "/admin/settings", label: "Settings" },
-];
 
 export default function AdminProductsPage() {
   const { user, loading } = useAuth();
@@ -33,7 +25,7 @@ export default function AdminProductsPage() {
   if (loading || !user) return null;
 
   return (
-    <PortalLayout title="Super Admin" navItems={navItems}>
+    <PortalLayout title="Super Admin" navItems={adminNavItems}>
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-brand-ink">Products</h2>
         <p className="text-brand-muted">{products.length} catalog products</p>

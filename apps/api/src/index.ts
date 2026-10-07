@@ -28,6 +28,9 @@ import {
 } from "./modules/vendors/vendors.routes.js";
 import { publicDeliveryRoutes } from "./modules/deliveries/deliveries.routes.js";
 import { paymentRoutes } from "./modules/payments/payments.routes.js";
+import { startPaymentReconciler } from "./modules/payments/payments.reconcile.js";
+import { notificationRoutes } from "./modules/notifications/notifications.routes.js";
+import { orderRoutes } from "./modules/orders/orders.routes.js";
 import { ensureUploadDirs, getUploadRoot, MAX_IMAGE_BYTES } from "./modules/uploads/uploads.service.js";
 
 const app = Fastify({
@@ -118,6 +121,8 @@ await app.register(async (v1) => {
   await v1.register(studentActivityRoutes, { prefix: "/students" });
   await v1.register(cartRoutes, { prefix: "/cart" });
   await v1.register(paymentRoutes, { prefix: "/payments" });
+  await v1.register(notificationRoutes, { prefix: "/notifications" });
+  await v1.register(orderRoutes, { prefix: "/orders" });
   await v1.register(catalogRoutes, { prefix: "/catalog" });
   await v1.register(publicCatalogRoutes, { prefix: "/catalog" });
   await v1.register(publicVendorRoutes, { prefix: "/vendors" });
@@ -132,6 +137,9 @@ await app.register(async (v1) => {
 try {
   await app.listen({ port: config.port, host: config.host });
   console.log(`SchoolMart API running at http://${config.host}:${config.port}`);
+  startPaymentReconciler(60_000, (msg, err) =>
+    err ? app.log.error({ err }, msg) : app.log.info(msg),
+  );
 } catch (err) {
   app.log.error(err);
   process.exit(1);

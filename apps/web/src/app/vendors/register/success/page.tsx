@@ -12,7 +12,7 @@ export default function VendorRegisterSuccessPage() {
           <h1 className="text-2xl font-bold text-brand-ink">Application received</h1>
           <p className="mt-3 text-brand-muted">
             Your vendor account is pending approval. Once approved, you can log in and manage your catalog —
-            aggregating orders and completing last man delivery to schools.
+            aggregating orders and completing last-mile delivery to schools.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
             <Button href="/login">Log in</Button>

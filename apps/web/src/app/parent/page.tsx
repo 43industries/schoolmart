@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth, getPrimaryRole, getDashboardPath } from "@/lib/auth-context";
-import { parentsApi, walletsApi, activitiesApi, type ParentLink } from "@/lib/api";
+import { parentsApi, walletsApi, activitiesApi, ordersApi, type ParentLink, type ParentOrder } from "@/lib/api";
+import { orderBadgeClass, orderStatusLabel } from "@/lib/order-status";
 import { formatKES } from "@schoolmart/shared";
 import { PortalLayout } from "@/components/layout/portal-layout";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -16,6 +17,7 @@ const navItems = [
   { href: "/parent/children", label: "My Children" },
   { href: "/parent/shop", label: "Shop" },
   { href: "/parent/cart", label: "Cart" },
+  { href: "/parent/orders", label: "Orders" },
   { href: "/parent/wallet", label: "Wallet" },
   { href: "/parent/activities", label: "Funkies" },
   { href: "/parent/settings", label: "Settings" },
@@ -40,6 +42,7 @@ export default function ParentDashboard() {
   const [children, setChildren] = useState<ParentLink[]>([]);
   const [walletTotalMinor, setWalletTotalMinor] = useState<number | null>(null);
   const [activityCount, setActivityCount] = useState(0);
+  const [orders, setOrders] = useState<ParentOrder[]>([]);
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
@@ -60,6 +63,10 @@ export default function ParentDashboard() {
         .listForParent()
         .then((res) => setActivityCount(res.activities.length))
         .catch(() => setActivityCount(0));
+      ordersApi
+        .mine()
+        .then((res) => setOrders(res.orders))
+        .catch(() => setOrders([]));
     }
   }, [user]);
 
@@ -67,6 +74,10 @@ export default function ParentDashboard() {
 
   const activeChildren = children.filter((c) => c.status === "ACTIVE");
   const pendingChildren = children.filter((c) => c.status === "PENDING_SCHOOL_APPROVAL");
+  const activeOrders = orders.filter(
+    (o) => !["COLLECTED", "COMPLETED", "REFUNDED", "CANCELLED", "PENDING_PAYMENT"].includes(o.status),
+  );
+  const inTransit = activeOrders.filter((o) => ["DISPATCHED", "IN_TRANSIT"].includes(o.status)).length;
 
   return (
     <PortalLayout title="Parent Portal" navItems={navItems}>
@@ -133,7 +144,12 @@ export default function ParentDashboard() {
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { icon: Users, label: "Active children", value: String(activeChildren.length) },
-          { icon: Package, label: "Deliveries in transit", value: "0", hint: "Orders appear here once placed" },
+          {
+            icon: Package,
+            label: "Deliveries in transit",
+            value: String(inTransit),
+            hint: `${activeOrders.length} active order${activeOrders.length === 1 ? "" : "s"}`,
+          },
           {
             icon: Wallet,
             label: "Wallet balance",
@@ -171,14 +187,34 @@ export default function ParentDashboard() {
                   : " Browse the shop to place your first delivery."}
             </CardDescription>
           </CardHeader>
-          <div className="rounded-xl border border-dashed border-gray-200 bg-brand-surface px-4 py-8 text-center text-sm text-brand-muted">
-            No active deliveries yet.
-          </div>
-          {activeChildren.length > 0 && (
-            <div className="mt-4">
-              <Button href="/parent/shop">Order for school delivery</Button>
+          {activeOrders.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-gray-200 bg-brand-surface px-4 py-8 text-center text-sm text-brand-muted">
+              No active deliveries yet.
             </div>
+          ) : (
+            <ul className="space-y-2">
+              {activeOrders.slice(0, 4).map((o) => (
+                <li
+                  key={o.id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-gray-100 px-3 py-2 text-sm"
+                >
+                  <span>
+                    <span className="font-medium text-brand-ink">{o.orderNumber}</span>
+                    <span className="text-brand-muted"> · {o.student.firstName}</span>
+                  </span>
+                  <span className={orderBadgeClass(o.status)}>{orderStatusLabel(o.status)}</span>
+                </li>
+              ))}
+            </ul>
           )}
+          <div className="mt-4 flex flex-wrap gap-3">
+            {orders.length > 0 && <Button href="/parent/orders">Track orders</Button>}
+            {activeChildren.length > 0 && (
+              <Button variant={orders.length > 0 ? "secondary" : "primary"} href="/parent/shop">
+                Order for school delivery
+              </Button>
+            )}
+          </div>
         </Card>
 
         <Card>

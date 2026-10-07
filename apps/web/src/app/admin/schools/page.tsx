@@ -4,17 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { adminApi } from "@/lib/api";
+import { adminNavItems } from "@/lib/admin-nav";
 import { PortalLayout } from "@/components/layout/portal-layout";
 import { Card } from "@/components/ui/card";
-
-const navItems = [
-  { href: "/admin", label: "Dashboard" },
-  { href: "/admin/schools", label: "Schools" },
-  { href: "/admin/vendors", label: "Vendors" },
-  { href: "/admin/products", label: "Products" },
-  { href: "/admin/audit-logs", label: "Audit Logs" },
-  { href: "/admin/settings", label: "Settings" },
-];
 
 interface SchoolRecord {
   id: string;
@@ -43,7 +35,7 @@ export default function AdminSchoolsPage() {
   if (loading || !user) return null;
 
   return (
-    <PortalLayout title="Super Admin" navItems={navItems}>
+    <PortalLayout title="Super Admin" navItems={adminNavItems}>
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-brand-ink">Schools</h2>
         <p className="text-brand-muted">{schools.length} schools on platform</p>

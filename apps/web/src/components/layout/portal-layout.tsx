@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { LogOut, Menu } from "lucide-react";
 import { useState } from "react";
 
@@ -38,7 +39,11 @@ export function PortalLayout({ title, navItems, children }: PortalLayoutProps) {
         </div>
         <nav className="space-y-1 px-3">
           {navItems.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(item.href + "/");
+            const deeperMatch = navItems.some(
+              (other) => other.href.length > item.href.length && pathname.startsWith(other.href),
+            );
+            const active =
+              pathname === item.href || (pathname.startsWith(item.href + "/") && !deeperMatch);
             return (
               <Link
                 key={item.href}
@@ -82,7 +87,8 @@ export function PortalLayout({ title, navItems, children }: PortalLayoutProps) {
           <button className="lg:hidden" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
             <Menu className="h-5 w-5 text-brand-teal" />
           </button>
-          <h1 className="text-lg font-semibold text-brand-ink">{title}</h1>
+          <h1 className="flex-1 text-lg font-semibold text-brand-ink">{title}</h1>
+          {user && <NotificationBell />}
         </header>
         <main className="flex-1 p-4 lg:p-8">{children}</main>
       </div>

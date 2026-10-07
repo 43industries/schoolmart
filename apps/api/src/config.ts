@@ -11,13 +11,17 @@ export const config = {
   cookieSecret: process.env.COOKIE_SECRET ?? "dev-cookie-secret",
   webUrl: process.env.WEB_URL ?? "http://localhost:3000",
   isDev: (process.env.NODE_ENV ?? "development") === "development",
+  /** mock = local/dev confirm; mpesa = live Daraja STK (requires full MPESA_* set). */
   paymentsProvider: (process.env.PAYMENTS_PROVIDER ?? "mock") as "mock" | "mpesa",
   mpesa: {
     consumerKey: process.env.MPESA_CONSUMER_KEY ?? "",
     consumerSecret: process.env.MPESA_CONSUMER_SECRET ?? "",
     shortcode: process.env.MPESA_SHORTCODE ?? "",
     passkey: process.env.MPESA_PASSKEY ?? "",
+    /** Public URL hitting POST /api/v1/payments/webhooks/mpesa/<MPESA_WEBHOOK_TOKEN> */
     callbackUrl: process.env.MPESA_CALLBACK_URL ?? "",
+    /** Shared secret in the callback path; required in production. */
+    webhookToken: process.env.MPESA_WEBHOOK_TOKEN ?? "",
     env: (process.env.MPESA_ENV ?? "sandbox") as "sandbox" | "production",
   },
 } as const;

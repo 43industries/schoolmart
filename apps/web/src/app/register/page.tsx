@@ -167,6 +167,14 @@ export default function RegisterPage() {
                 </div>
               </div>
 
+              <p className="text-xs text-brand-muted">
+                By continuing you confirm you are this child&apos;s parent or guardian and consent to SchoolMart processing
+                their details for school deliveries, as described in our{" "}
+                <Link href="/privacy" target="_blank" className="font-semibold text-brand-teal hover:underline">
+                  privacy notice
+                </Link>
+                .
+              </p>
               <Button type="submit" disabled={loading} className="w-full">
                 {loading ? "Creating account..." : "Create account & link child"}
               </Button>

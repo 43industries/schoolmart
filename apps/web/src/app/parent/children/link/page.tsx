@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { parentsApi, schoolsApi, ApiError, type School } from "@/lib/api";
 import { PortalLayout } from "@/components/layout/portal-layout";
@@ -14,6 +15,7 @@ const navItems = [
   { href: "/parent/children", label: "My Children" },
   { href: "/parent/shop", label: "Shop" },
   { href: "/parent/cart", label: "Cart" },
+  { href: "/parent/orders", label: "Orders" },
   { href: "/parent/wallet", label: "Wallet" },
   { href: "/parent/activities", label: "Funkies" },
   { href: "/parent/settings", label: "Settings" },
@@ -130,6 +132,14 @@ export default function LinkChildPage() {
                 onChange={(e) => setForm({ ...form, relationship: e.target.value })}
                 options={relationships}
               />
+              <p className="text-xs text-brand-muted">
+                By requesting a link you confirm you are this child&apos;s parent or guardian and consent to SchoolMart
+                processing their details for school deliveries, as described in our{" "}
+                <Link href="/privacy" target="_blank" className="font-semibold text-brand-teal hover:underline">
+                  privacy notice
+                </Link>
+                .
+              </p>
               <div className="flex gap-3">
                 <Button type="submit" disabled={submitting}>
                   {submitting ? "Submitting..." : "Request Link"}

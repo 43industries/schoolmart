@@ -20,6 +20,8 @@ import { formatKES, toMinorUnits } from "@schoolmart/shared";
 
 const navItems = [
   { href: "/vendor", label: "Catalog" },
+  { href: "/vendor/orders", label: "Orders" },
+  { href: "/vendor/payouts", label: "Payouts" },
 ];
 
 function slugify(name: string) {

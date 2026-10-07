@@ -7,8 +7,8 @@ export default function HowItWorksPage() {
     { num: "1", title: "Parent creates an account", desc: "Register and link your children so you can order, pay and track deliveries to school." },
     { num: "2", title: "Browse & order", desc: "Choose meals, essentials, care packages and more from vendors serving your child's campus." },
     { num: "3", title: "Pay securely", desc: "Pay via M-PESA, card, or parent-controlled student wallet. Payments are verified by the platform." },
-    { num: "4", title: "Vendors aggregate", desc: "Vendors group orders and prepare fulfilment for efficient last man delivery to school." },
-    { num: "5", title: "Last man delivery", desc: "Orders are delivered to the school collection point — tracked for the parent the whole way." },
+    { num: "4", title: "Vendors aggregate", desc: "Vendors group orders and prepare fulfilment for efficient last-mile delivery to school." },
+    { num: "5", title: "Last-mile delivery", desc: "Orders are delivered to the school collection point — tracked for the parent the whole way." },
     { num: "6", title: "Student collects securely", desc: "Your child verifies identity with PIN, QR code, or student ID and collects their order." },
     { num: "7", title: "Parent tracks confirmation", desc: "You see collection confirmation so tracked deliveries close the loop." },
   ];

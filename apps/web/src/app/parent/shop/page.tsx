@@ -17,6 +17,7 @@ const navItems = [
   { href: "/parent/children", label: "My Children" },
   { href: "/parent/shop", label: "Shop" },
   { href: "/parent/cart", label: "Cart" },
+  { href: "/parent/orders", label: "Orders" },
   { href: "/parent/wallet", label: "Wallet" },
   { href: "/parent/activities", label: "Funkies" },
   { href: "/parent/settings", label: "Settings" },

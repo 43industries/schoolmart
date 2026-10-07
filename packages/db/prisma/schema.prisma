@@ -206,6 +206,12 @@ enum LedgerAccountCode {
   PLATFORM_REVENUE
 }
 
+enum VendorPayoutStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
 // ─── Phase 1: Identity & School Graph ───────────────────────────────────────
 
 model User {
@@ -444,6 +450,10 @@ model Vendor {
   termsAcceptedAt    DateTime?    @map("terms_accepted_at")
   agreementVersion   String?      @map("agreement_version")
   agreementAcceptedAt DateTime?   @map("agreement_accepted_at")
+  payoutMpesaPhone   String?      @map("payout_mpesa_phone")
+  payoutBankName     String?      @map("payout_bank_name")
+  payoutAccountName  String?      @map("payout_account_name")
+  payoutAccountNumber String?     @map("payout_account_number")
   createdAt          DateTime     @default(now()) @map("created_at")
   updatedAt          DateTime     @updatedAt @map("updated_at")
 
@@ -451,6 +461,7 @@ model Vendor {
   products      Product[]
   schoolVendors SchoolVendor[]
   orders        Order[]
+  payouts       VendorPayout[]
 
   @@index([ownerUserId])
   @@index([status])
@@ -764,20 +775,25 @@ model DeliveryWindow {
 }
 
 model DeliveryBatch {
-  id          String              @id @default(uuid())
-  schoolId    String              @map("school_id")
-  batchNumber String              @unique @map("batch_number")
-  deliveryDate DateTime           @map("delivery_date")
-  status      DeliveryBatchStatus @default(PLANNED)
-  orderCount  Int                 @default(0) @map("order_count")
-  manifest    Json                @default("{}")
-  createdAt   DateTime            @default(now()) @map("created_at")
-  updatedAt   DateTime            @updatedAt @map("updated_at")
+  id                String              @id @default(uuid())
+  schoolId          String              @map("school_id")
+  deliveryPartnerId String?             @map("delivery_partner_id")
+  batchNumber       String              @unique @map("batch_number")
+  deliveryDate      DateTime            @map("delivery_date")
+  status            DeliveryBatchStatus @default(PLANNED)
+  orderCount        Int                 @default(0) @map("order_count")
+  manifest          Json                @default("{}")
+  pickedUpAt        DateTime?           @map("picked_up_at")
+  deliveredAt       DateTime?           @map("delivered_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
 
-  school School  @relation(fields: [schoolId], references: [id])
-  orders Order[]
+  school          School           @relation(fields: [schoolId], references: [id])
+  deliveryPartner DeliveryPartner? @relation(fields: [deliveryPartnerId], references: [id])
+  orders          Order[]
 
   @@index([schoolId])
+  @@index([deliveryPartnerId])
   @@index([deliveryDate])
   @@map("delivery_batches")
 }
@@ -794,7 +810,8 @@ model DeliveryPartner {
   createdAt     DateTime              @default(now()) @map("created_at")
   updatedAt     DateTime              @updatedAt @map("updated_at")
 
-  owner User @relation("DeliveryPartnerOwner", fields: [ownerUserId], references: [id])
+  owner   User            @relation("DeliveryPartnerOwner", fields: [ownerUserId], references: [id])
+  batches DeliveryBatch[]
 
   @@index([ownerUserId])
   @@index([status])
@@ -813,6 +830,7 @@ model Notification {
 
   @@index([userId])
   @@index([read])
+  @@index([userId, createdAt])
   @@map("notifications")
 }
 
@@ -911,4 +929,25 @@ model LedgerEntry {
   @@index([accountCode])
   @@index([createdAt])
   @@map("ledger_entries")
+}
+
+model VendorPayout {
+  id               String             @id @default(uuid())
+  vendorId         String             @map("vendor_id")
+  amountMinor      Int                @map("amount_minor")
+  status           VendorPayoutStatus @default(PENDING)
+  orderIds         Json               @default("[]") @map("order_ids")
+  providerRef      String?            @map("provider_ref")
+  notes            String?
+  settledAt        DateTime?          @map("settled_at")
+  settledByUserId  String?            @map("settled_by_user_id")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("vendor_payouts")
 }

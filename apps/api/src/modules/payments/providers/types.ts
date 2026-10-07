@@ -20,6 +20,17 @@ export type ProviderInitiateResult = {
 export type ProviderWebhookResult = {
   providerRef: string;
   status: "SUCCEEDED" | "FAILED";
+  /** Amount the provider reports as actually paid, in minor units */
+  amountMinor?: number;
+  /** Provider receipt, e.g. M-PESA receipt number */
+  receipt?: string;
+  resultDesc?: string;
+  raw?: unknown;
+};
+
+export type ProviderQueryResult = {
+  status: "SUCCEEDED" | "FAILED" | "PROCESSING";
+  resultDesc?: string;
   raw?: unknown;
 };
 
@@ -27,4 +38,6 @@ export interface PaymentProvider {
   name: string;
   initiate(input: ProviderInitiateInput): Promise<ProviderInitiateResult>;
   parseWebhook?(body: unknown): Promise<ProviderWebhookResult>;
+  /** Ask the provider for the current status of an intent (reconciliation). */
+  queryStatus?(providerRef: string): Promise<ProviderQueryResult>;
 }

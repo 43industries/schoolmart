@@ -17,6 +17,7 @@ const navItems = [
   { href: "/parent/children", label: "My Children" },
   { href: "/parent/shop", label: "Shop" },
   { href: "/parent/cart", label: "Cart" },
+  { href: "/parent/orders", label: "Orders" },
   { href: "/parent/wallet", label: "Wallet" },
   { href: "/parent/activities", label: "Funkies" },
   { href: "/parent/settings", label: "Settings" },
@@ -32,7 +33,13 @@ export default function CartPage() {
   const [studentId, setStudentId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PayMethod>("WALLET");
   const [phone, setPhone] = useState("");
-  const [pendingPayment, setPendingPayment] = useState<{ providerRef: string; hint: string } | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<{
+    paymentId: string;
+    providerRef: string;
+    provider: string;
+    method: string;
+    hint: string;
+  } | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -80,12 +87,22 @@ export default function CartPage() {
       if (result.status === "PAID" && result.order) {
         setMessage(`Paid · Order ${result.order.orderNumber}`);
         load();
-      } else if (result.status === "PENDING_PAYMENT" && result.payment?.providerRef) {
+      } else if (result.status === "PENDING_PAYMENT" && result.payment?.providerRef && result.payment.id) {
+        const live = result.payment.provider === "mpesa" && paymentMethod === "MPESA";
         setPendingPayment({
+          paymentId: result.payment.id,
           providerRef: result.payment.providerRef,
-          hint: result.instructions ?? "Confirm payment to complete the order.",
+          provider: result.payment.provider,
+          method: paymentMethod,
+          hint: live
+            ? result.instructions ?? "STK push sent. Approve on your phone — we will complete the order when Safaricom confirms."
+            : result.instructions ?? "Confirm payment to complete the order.",
         });
-        setMessage(`Awaiting ${paymentMethod} payment for order ${result.order?.orderNumber ?? ""}`);
+        setMessage(
+          live
+            ? `Waiting for M-PESA approval · order ${result.order?.orderNumber ?? ""}`
+            : `Awaiting ${paymentMethod} payment for order ${result.order?.orderNumber ?? ""}`,
+        );
       } else {
         setMessage(result.message ?? "Checkout needs your approval on the Wallet page");
       }
@@ -96,8 +113,40 @@ export default function CartPage() {
     }
   };
 
+  const waitingForPhone =
+    !!pendingPayment && pendingPayment.provider === "mpesa" && pendingPayment.method === "MPESA";
+
+  useEffect(() => {
+    if (!pendingPayment || !waitingForPhone) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await paymentsApi.get(pendingPayment.paymentId);
+        if (cancelled) return;
+        if (res.payment.status === "SUCCEEDED") {
+          setPendingPayment(null);
+          setMessage(
+            res.order ? `Paid · Order ${res.order.orderNumber}` : "M-PESA payment received",
+          );
+          load();
+        } else if (res.payment.status === "FAILED") {
+          setPendingPayment(null);
+          setError("M-PESA payment failed or was cancelled on the phone");
+        }
+      } catch {
+        /* keep polling */
+      }
+    };
+    tick();
+    const id = setInterval(tick, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [pendingPayment, waitingForPhone]);
+
   const handleConfirmPayment = async () => {
-    if (!pendingPayment) return;
+    if (!pendingPayment || waitingForPhone) return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -223,7 +272,8 @@ export default function CartPage() {
               <PendingPaymentConfirm
                 hint={pendingPayment.hint}
                 busy={busy}
-                onConfirm={handleConfirmPayment}
+                waitingForPhone={waitingForPhone}
+                onConfirm={waitingForPhone ? undefined : handleConfirmPayment}
               />
             )}
           </Card>

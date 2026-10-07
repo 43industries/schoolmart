@@ -83,6 +83,19 @@ export function getVendorIdFromUser(user: TokenPayload): string | null {
   return role?.scopeId ?? null;
 }
 
+export function requireDriver() {
+  return async (req: FastifyRequest, _reply: FastifyReply) => {
+    if (!req.user) throw new UnauthorizedError();
+    const hasDriver = req.user.roles.some((r) => r.role === Role.DRIVER && !!r.scopeId);
+    if (!hasDriver) throw new ForbiddenError("Delivery agent access required");
+  };
+}
+
+/** DRIVER roles are scoped to their DeliveryPartner id. */
+export function getDeliveryPartnerIdFromUser(user: TokenPayload): string | null {
+  return user.roles.find((r) => r.role === Role.DRIVER && r.scopeId)?.scopeId ?? null;
+}
+
 export function requireSuperAdmin() {
   return requireRole(Role.SUPER_ADMIN);
 }

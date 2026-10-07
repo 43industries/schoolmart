@@ -115,6 +115,7 @@ export function getDashboardPath(role: string): string {
     case "SUPPORT": return "/admin/support";
     case "PARENT": return "/parent";
     case "VENDOR": return "/vendor";
+    case "DRIVER": return "/driver";
     case "STUDENT": return "/student";
     default: return "/parent";
   }

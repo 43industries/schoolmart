@@ -3,7 +3,7 @@ import { MarketingHeader, MarketingFooter } from "@/components/layout/marketing-
 const faqs = [
   {
     q: "What is SchoolMart?",
-    a: "SchoolMart is seamless infrastructure that lets parents purchase anything and deliver it to their children at school through trusted ecommerce and last man delivery. Vendors aggregate and deliver. Parents order, pay and track. Students collect securely.",
+    a: "SchoolMart is seamless infrastructure that lets parents purchase anything and deliver it to their children at school through trusted ecommerce and last-mile delivery. Vendors aggregate and deliver. Parents order, pay and track. Students collect securely.",
   },
   {
     q: "How does payment work?",
@@ -19,7 +19,7 @@ const faqs = [
   },
   {
     q: "How does my child collect their order?",
-    a: "After last man delivery to the school collection point, your child verifies identity using PIN, QR code, or student ID and collects securely. You can track confirmation as a parent.",
+    a: "After last-mile delivery to the school collection point, your child verifies identity using PIN, QR code, or student ID and collects securely. You can track confirmation as a parent.",
   },
   {
     q: "How do vendors join?",

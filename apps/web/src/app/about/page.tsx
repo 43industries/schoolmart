@@ -12,7 +12,7 @@ export default function AboutPage() {
         <div className="space-y-6 text-lg text-brand-muted">
           <p>
             SchoolMart is seamless infrastructure that allows parents to purchase anything and deliver it to their
-            children in schools — enabling trusted ecommerce and last man delivery.
+            children in schools — enabling trusted ecommerce and last-mile delivery.
           </p>
           <p>
             Vendors aggregate and deliver. Parents order, pay and track. Students collect securely.

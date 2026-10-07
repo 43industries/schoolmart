@@ -16,6 +16,7 @@ const navItems = [
   { href: "/parent/children", label: "My Children" },
   { href: "/parent/shop", label: "Shop" },
   { href: "/parent/cart", label: "Cart" },
+  { href: "/parent/orders", label: "Orders" },
   { href: "/parent/wallet", label: "Wallet" },
   { href: "/parent/activities", label: "Funkies" },
   { href: "/parent/settings", label: "Settings" },
@@ -40,7 +41,12 @@ export default function ParentWalletPage() {
   const [fundAmount, setFundAmount] = useState("1000");
   const [fundPhone, setFundPhone] = useState("");
   const [fundMethod, setFundMethod] = useState<"MPESA" | "CARD" | "BANK" | "OTHER">("MPESA");
-  const [pendingFund, setPendingFund] = useState<{ providerRef: string; hint: string } | null>(null);
+  const [pendingFund, setPendingFund] = useState<{
+    paymentId: string;
+    providerRef: string;
+    provider: string;
+    hint: string;
+  } | null>(null);
   const [ruleForm, setRuleForm] = useState({
     category: "ALL",
     period: "WEEKLY",
@@ -143,11 +149,20 @@ export default function ParentWalletPage() {
         phone: fundPhone || undefined,
       });
       if (result.requiresConfirmation && result.payment.providerRef) {
+        const live = result.payment.provider === "mpesa" && result.payment.method === "MPESA";
         setPendingFund({
+          paymentId: result.payment.id,
           providerRef: result.payment.providerRef,
-          hint: result.instructions ?? "Confirm payment to credit the wallet.",
+          provider: result.payment.provider,
+          hint: live
+            ? result.instructions ?? "STK push sent. Approve on your phone — we will credit the wallet when Safaricom confirms."
+            : result.instructions ?? "Confirm payment to credit the wallet.",
         });
-        setMessage(`Payment ${result.payment.status.toLowerCase()} · ${result.payment.method}`);
+        setMessage(
+          live
+            ? "Waiting for M-PESA approval on your phone…"
+            : `Payment ${result.payment.status.toLowerCase()} · ${result.payment.method}`,
+        );
       } else if (typeof result.balanceMinor === "number") {
         setMessage(`Funded successfully. New balance: ${formatKES(result.balanceMinor)}`);
         await Promise.all([loadList(), loadDetail(selectedId)]);
@@ -161,8 +176,42 @@ export default function ParentWalletPage() {
     }
   };
 
+  const waitingForPhone =
+    !!pendingFund && pendingFund.provider === "mpesa" && fundMethod === "MPESA";
+
+  useEffect(() => {
+    if (!pendingFund || !waitingForPhone || !selectedId) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await paymentsApi.get(pendingFund.paymentId);
+        if (cancelled) return;
+        if (res.payment.status === "SUCCEEDED") {
+          setPendingFund(null);
+          setMessage(
+            typeof res.balanceMinor === "number"
+              ? `Wallet credited. New balance: ${formatKES(res.balanceMinor)}`
+              : "M-PESA payment received",
+          );
+          await Promise.all([loadList(), loadDetail(selectedId)]);
+        } else if (res.payment.status === "FAILED") {
+          setPendingFund(null);
+          setError("M-PESA payment failed or was cancelled on the phone");
+        }
+      } catch {
+        /* keep polling */
+      }
+    };
+    tick();
+    const id = setInterval(tick, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [pendingFund, waitingForPhone, selectedId, loadList, loadDetail]);
+
   const handleConfirmFund = async () => {
-    if (!pendingFund || !selectedId) return;
+    if (!pendingFund || !selectedId || waitingForPhone) return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -378,7 +427,8 @@ export default function ParentWalletPage() {
                       <PendingPaymentConfirm
                         hint={pendingFund.hint}
                         busy={busy}
-                        onConfirm={handleConfirmFund}
+                        waitingForPhone={waitingForPhone}
+                        onConfirm={waitingForPhone ? undefined : handleConfirmFund}
                       />
                     </div>
                   )}

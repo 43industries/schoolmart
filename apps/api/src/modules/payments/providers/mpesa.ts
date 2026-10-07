@@ -5,6 +5,7 @@ import type {
   PaymentProvider,
   ProviderInitiateInput,
   ProviderInitiateResult,
+  ProviderQueryResult,
   ProviderWebhookResult,
 } from "./types.js";
 
@@ -17,6 +18,15 @@ function darajaBaseUrl() {
 function hasDarajaCredentials() {
   const { consumerKey, consumerSecret, shortcode, passkey, callbackUrl } = config.mpesa;
   return Boolean(consumerKey && consumerSecret && shortcode && passkey && callbackUrl);
+}
+
+function assertConfigured() {
+  if (!hasDarajaCredentials()) {
+    throw new AppError(
+      503,
+      "M-PESA is not configured. Set MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, MPESA_SHORTCODE, MPESA_PASSKEY, and MPESA_CALLBACK_URL (or set PAYMENTS_PROVIDER=mock).",
+    );
+  }
 }
 
 async function getAccessToken(): Promise<string> {
@@ -38,10 +48,11 @@ function stkPassword(timestamp: string) {
   return Buffer.from(`${shortcode}${passkey}${timestamp}`).toString("base64");
 }
 
+/** Daraja expects YYYYMMDDHHmmss in Kenya time (UTC+3), regardless of server timezone. */
 function timestampNow() {
-  const d = new Date();
+  const d = new Date(Date.now() + 3 * 60 * 60 * 1000);
   const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}`;
 }
 
 function toMpesaPhone(phoneE164: string) {
@@ -49,9 +60,20 @@ function toMpesaPhone(phoneE164: string) {
   return phoneE164.replace(/^\+/, "");
 }
 
+/** STK charges whole shillings; this is the amount Safaricom will report back. */
+export function mpesaChargedMinor(amountMinor: number) {
+  return Math.max(1, Math.round(amountMinor / 100)) * 100;
+}
+
+type CallbackItem = { Name?: string; Value?: string | number };
+
+function callbackValue(items: CallbackItem[] | undefined, name: string) {
+  return items?.find((i) => i.Name === name)?.Value;
+}
+
 /**
- * Daraja STK Push provider. When credentials are missing, falls back to a
- * processing intent that must be completed via mock complete / webhook.
+ * Daraja STK Push provider. When PAYMENTS_PROVIDER=mpesa, full Daraja credentials
+ * are required for M-PESA — missing config fails clearly (no silent mock success).
  */
 export const mpesaPaymentProvider: PaymentProvider = {
   name: "mpesa",
@@ -72,27 +94,16 @@ export const mpesaPaymentProvider: PaymentProvider = {
       throw new ValidationError("M-PESA phone number is required");
     }
 
-    if (!hasDarajaCredentials()) {
-      const providerRef = `mpesa-pending-${randomUUID()}`;
-      return {
-        provider: "mpesa",
-        providerRef,
-        status: "PROCESSING",
-        instructions:
-          "Daraja credentials not configured. Payment is pending — use mock complete or set MPESA_* env vars.",
-        raw: { configured: false },
-      };
-    }
+    assertConfigured();
 
     const token = await getAccessToken();
     const timestamp = timestampNow();
-    const amountKes = Math.max(1, Math.round(input.amountMinor / 100));
     const body = {
       BusinessShortCode: config.mpesa.shortcode,
       Password: stkPassword(timestamp),
       Timestamp: timestamp,
       TransactionType: "CustomerPayBillOnline",
-      Amount: amountKes,
+      Amount: mpesaChargedMinor(input.amountMinor) / 100,
       PartyA: toMpesaPhone(input.phoneE164),
       PartyB: config.mpesa.shortcode,
       PhoneNumber: toMpesaPhone(input.phoneE164),
@@ -112,7 +123,8 @@ export const mpesaPaymentProvider: PaymentProvider = {
 
     const raw = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new AppError(502, "M-PESA STK push failed");
+      const message = (raw as { errorMessage?: string }).errorMessage;
+      throw new AppError(502, message ? `M-PESA STK push failed: ${message}` : "M-PESA STK push failed");
     }
 
     const checkoutId =
@@ -128,35 +140,72 @@ export const mpesaPaymentProvider: PaymentProvider = {
     };
   },
 
+  /** Accepts only Safaricom's STK callback shape. */
   async parseWebhook(body: unknown): Promise<ProviderWebhookResult> {
     const payload = body as {
       Body?: {
         stkCallback?: {
           CheckoutRequestID?: string;
-          ResultCode?: number;
+          ResultCode?: number | string;
+          ResultDesc?: string;
+          CallbackMetadata?: { Item?: CallbackItem[] };
         };
       };
-      providerRef?: string;
-      status?: string;
     };
 
     const cb = payload.Body?.stkCallback;
-    if (cb?.CheckoutRequestID) {
-      return {
-        providerRef: cb.CheckoutRequestID,
-        status: cb.ResultCode === 0 ? "SUCCEEDED" : "FAILED",
-        raw: body,
-      };
+    if (!cb?.CheckoutRequestID || cb.ResultCode === undefined) {
+      throw new ValidationError("Unrecognized M-PESA webhook payload");
     }
 
-    if (payload.providerRef && (payload.status === "SUCCEEDED" || payload.status === "FAILED")) {
-      return {
-        providerRef: payload.providerRef,
-        status: payload.status,
-        raw: body,
-      };
-    }
+    const succeeded = Number(cb.ResultCode) === 0;
+    const items = cb.CallbackMetadata?.Item;
+    const amount = callbackValue(items, "Amount");
+    const receipt = callbackValue(items, "MpesaReceiptNumber");
 
-    throw new ValidationError("Unrecognized M-PESA webhook payload");
+    return {
+      providerRef: cb.CheckoutRequestID,
+      status: succeeded ? "SUCCEEDED" : "FAILED",
+      amountMinor: amount !== undefined ? Math.round(Number(amount) * 100) : undefined,
+      receipt: receipt !== undefined ? String(receipt) : undefined,
+      resultDesc: cb.ResultDesc,
+      raw: body,
+    };
+  },
+
+  async queryStatus(providerRef: string): Promise<ProviderQueryResult> {
+    if (!hasDarajaCredentials() || !providerRef.startsWith("ws_")) {
+      return { status: "PROCESSING" };
+    }
+    const token = await getAccessToken();
+    const timestamp = timestampNow();
+    const res = await fetch(`${darajaBaseUrl()}/mpesa/stkpushquery/v1/query`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        BusinessShortCode: config.mpesa.shortcode,
+        Password: stkPassword(timestamp),
+        Timestamp: timestamp,
+        CheckoutRequestID: providerRef,
+      }),
+    });
+    const raw = (await res.json().catch(() => ({}))) as {
+      ResultCode?: string | number;
+      ResultDesc?: string;
+      errorCode?: string;
+    };
+
+    // Daraja returns an errorCode while the customer has not yet responded.
+    if (raw.ResultCode === undefined || raw.errorCode) {
+      return { status: "PROCESSING", raw };
+    }
+    return {
+      status: Number(raw.ResultCode) === 0 ? "SUCCEEDED" : "FAILED",
+      resultDesc: raw.ResultDesc,
+      raw,
+    };
   },
 };

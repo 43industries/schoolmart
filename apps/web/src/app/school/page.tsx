@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, getPrimaryRole, getDashboardPath } from "@/lib/auth-context";
-import { schoolAdminApi } from "@/lib/api";
+import { schoolAdminApi, ordersApi } from "@/lib/api";
 import { PortalLayout } from "@/components/layout/portal-layout";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Users, Package, Clock } from "lucide-react";
 
 const navItems = [
   { href: "/school", label: "Dashboard" },
+  { href: "/school/deliveries", label: "Deliveries" },
   { href: "/school/students", label: "Students" },
   { href: "/school/parent-links", label: "Parent Links" },
   { href: "/school/activities", label: "Funkies" },
@@ -23,6 +24,8 @@ export default function SchoolDashboard() {
   const router = useRouter();
   const [pendingCount, setPendingCount] = useState(0);
   const [studentCount, setStudentCount] = useState(0);
+  const [activeOrders, setActiveOrders] = useState(0);
+  const [awaitingAction, setAwaitingAction] = useState(0);
 
   const schoolRole = user?.roles.find((r) => r.role === "SCHOOL_ADMIN" && r.scopeId);
   const schoolId = schoolRole?.scopeId;
@@ -36,6 +39,13 @@ export default function SchoolDashboard() {
     if (schoolId) {
       schoolAdminApi.pendingLinks(schoolId).then((res) => setPendingCount((res.links as unknown[]).length)).catch(() => {});
       schoolAdminApi.students(schoolId).then((res) => setStudentCount((res.students as unknown[]).length)).catch(() => {});
+      ordersApi
+        .school(schoolId)
+        .then((res) => {
+          setActiveOrders(res.incoming.length + res.received.length + res.ready.length);
+          setAwaitingAction(res.received.length + res.ready.filter((o) => o.uncollected).length);
+        })
+        .catch(() => {});
     }
   }, [schoolId]);
 
@@ -52,7 +62,7 @@ export default function SchoolDashboard() {
         {[
           { icon: Users, label: "Students", value: studentCount },
           { icon: Clock, label: "Pending Parent Links", value: pendingCount },
-          { icon: Package, label: "Active Orders", value: 0 },
+          { icon: Package, label: "Active Orders", value: activeOrders },
         ].map((stat) => (
           <Card key={stat.label}>
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-teal/10">
@@ -63,6 +73,18 @@ export default function SchoolDashboard() {
           </Card>
         ))}
       </div>
+
+      {awaitingAction > 0 && (
+        <Card className="mb-6 border-brand-teal/20 bg-brand-teal/5">
+          <CardHeader>
+            <CardTitle>Parcels need attention</CardTitle>
+            <CardDescription>
+              {awaitingAction} parcel(s) to sort or uncollected for more than 3 days.
+            </CardDescription>
+          </CardHeader>
+          <Button href="/school/deliveries">Open deliveries</Button>
+        </Card>
+      )}
 
       {pendingCount > 0 && (
         <Card className="mb-6 border-amber-200 bg-amber-50">

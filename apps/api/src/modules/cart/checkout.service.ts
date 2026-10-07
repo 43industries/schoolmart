@@ -77,6 +77,16 @@ export async function loadCheckoutLines(
     });
   }
 
+  // Each order is fulfilled, paid out, and delivered per vendor; mixed carts cannot be checked out together.
+  const vendorNames = new Set(cart.items.map((i) => i.product.vendor.name));
+  if (vendorNames.size > 1) {
+    throw new AppError(
+      400,
+      `Your cart has items from ${vendorNames.size} vendors (${[...vendorNames].join(", ")}). Check out one vendor at a time — remove the other vendor's items first.`,
+      "MULTI_VENDOR_CART",
+    );
+  }
+
   const subtotalMinor = lines.reduce((s, l) => s + l.priceMinor * l.quantity, 0);
   return { lines, subtotalMinor };
 }

@@ -4,6 +4,7 @@ import { ConflictError, ForbiddenError, NotFoundError, UnauthorizedError } from 
 import { hashPassword, verifyPin } from "../../lib/crypto.js";
 import { writeAuditLog, type AuditContext } from "../audit/audit.service.js";
 import { ensureWalletForStudent } from "../wallets/wallets.service.js";
+import { transitionOrders } from "../orders/order-lifecycle.service.js";
 
 async function getStudentForUser(userId: string) {
   const student = await prisma.student.findUnique({
@@ -206,22 +207,15 @@ export async function confirmStudentCollection(
   });
   if (!order) throw new NotFoundError("Order not ready for collection");
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const next = await tx.order.update({
-      where: { id: order.id },
-      data: { status: OrderStatus.COLLECTED },
-    });
-    await tx.orderStatusHistory.create({
-      data: {
-        orderId: order.id,
-        fromStatus: OrderStatus.READY_FOR_COLLECTION,
-        toStatus: OrderStatus.COLLECTED,
-        actorUserId: userId,
-        note: "Collected by student",
-      },
-    });
-    return next;
+  const moved = await transitionOrders({
+    orderIds: [order.id],
+    from: [OrderStatus.READY_FOR_COLLECTION],
+    to: OrderStatus.COLLECTED,
+    actorUserId: userId,
+    note: "Collected by student",
   });
+  if (moved.length === 0) throw new NotFoundError("Order not ready for collection");
+  const updated = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
 
   await writeAuditLog({
     action: "ORDER_COLLECTED",
