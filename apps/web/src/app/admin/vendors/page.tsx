@@ -35,6 +35,23 @@ export default function AdminVendorsPage() {
             <div>
               <p className="font-semibold text-brand-ink">{v.name}</p>
               <p className="text-sm text-brand-muted">{v._count?.products ?? 0} products</p>
+              {v.contactPersonName && (
+                <p className="text-sm text-brand-muted">
+                  Contact: {v.contactPersonName} · {v.contactPersonPhone ?? v.contactPhone ?? "—"}
+                </p>
+              )}
+              <p className="text-sm text-brand-muted">
+                Business email: {v.contactEmail ?? "—"}
+                {v.websiteUrl ? (
+                  <>
+                    {" · "}
+                    <a href={v.websiteUrl} target="_blank" rel="noreferrer" className="font-medium text-brand-teal hover:underline">
+                      Website
+                    </a>
+                  </>
+                ) : null}
+                {v.town ? ` · ${v.town}${v.county ? `, ${v.county}` : ""}` : ""}
+              </p>
             </div>
             <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
               v.status === "APPROVED" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"

@@ -44,17 +44,18 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   const token = getAccessToken();
   const url = `${API_URL}${path}`;
 
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
   let res: Response;
   try {
     res = await fetch(url, {
       ...rest,
       credentials: "include",
       headers: {
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(body !== undefined && !isFormData ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...headers,
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? (isFormData ? (body as FormData) : JSON.stringify(body)) : undefined,
     });
   } catch {
     throw new ApiError(
@@ -75,6 +76,20 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   }
 
   return data as T;
+}
+
+/** Fetch an authenticated binary response (e.g. a private logbook download). */
+export async function apiBlob(path: string): Promise<Blob> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    credentials: "include",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, data.message ?? "Download failed", data.error);
+  }
+  return res.blob();
 }
 
 export interface UserProfile {
@@ -103,12 +118,14 @@ export interface ParentLink {
   status: string;
   relationship: string;
   claimedFirstName?: string | null;
+  claimedMiddleName?: string | null;
   claimedLastName?: string | null;
   classTeacherName?: string | null;
   approvedAt: string | null;
   student: {
     id: string;
     firstName: string;
+    middleName?: string | null;
     lastName: string;
     preferredName?: string | null;
     studentNumber: string;
@@ -129,6 +146,7 @@ export const authApi = {
     lastName: string;
     child: {
       firstName: string;
+      middleName?: string;
       lastName: string;
       schoolId: string;
       studentNumber: string;
@@ -144,6 +162,7 @@ export const authApi = {
       accessToken: string;
       refreshToken: string;
       user: { sub: string; roles: UserProfile["roles"] };
+      profile?: UserProfile;
     }>("/auth/login", { method: "POST", body: data }),
 
   logout: () => api<{ success: boolean }>("/auth/logout", { method: "POST" }),
@@ -166,7 +185,7 @@ export const vendorsApi = {
 };
 
 export const deliveriesApi = {
-  register: (data: Record<string, unknown>) =>
+  register: (data: Record<string, unknown> | FormData) =>
     api<{ success: boolean; userId: string; partnerId: string; status: string; message: string }>(
       "/deliveries/register",
       { method: "POST", body: data },
@@ -182,6 +201,7 @@ export const parentsApi = {
   children: () => api<{ children: ParentLink[] }>("/parents/children"),
   linkChild: (data: {
     firstName: string;
+    middleName?: string;
     lastName: string;
     schoolId: string;
     studentNumber: string;
@@ -371,6 +391,14 @@ export interface Vendor {
   slug: string;
   status: string;
   description?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  contactPersonName?: string | null;
+  contactPersonPhone?: string | null;
+  websiteUrl?: string | null;
+  county?: string | null;
+  town?: string | null;
+  addressLine?: string | null;
   _count?: { products: number };
 }
 
@@ -479,6 +507,24 @@ export const cartApi = {
     }>("/cart/checkout", { method: "POST", body: data }),
 };
 
+export interface DeliveryPartnerSummary {
+  id: string;
+  status: string;
+  county: string;
+  town: string;
+  serviceTowns: string;
+  vehicleTypes: string[];
+  primaryVehicleType?: string | null;
+  vehiclePlateNumber?: string | null;
+  owner: { id: string; firstName: string; lastName: string; email: string | null; phoneE164: string | null };
+}
+
+export interface SchoolDeliveryPartnerRow {
+  id: string;
+  approved: boolean;
+  deliveryPartner: DeliveryPartnerSummary;
+}
+
 export const schoolAdminApi = {
   students: (schoolId: string) => api<{ students: unknown[] }>(`/schools/${schoolId}/students`),
   pendingLinks: (schoolId: string) => api<{ links: unknown[] }>(`/schools/${schoolId}/parent-links/pending`),
@@ -494,6 +540,17 @@ export const schoolAdminApi = {
     api(`/schools/${schoolId}/catalog/vendors/${vendorId}`, { method: "POST", body: { approved } }),
   approveProduct: (schoolId: string, productId: string, approved: boolean) =>
     api(`/schools/${schoolId}/catalog/products/${productId}`, { method: "POST", body: { approved } }),
+  deliveryPartners: (schoolId: string) =>
+    api<{ partners: SchoolDeliveryPartnerRow[] }>(`/orders/school/${schoolId}/delivery-partners`),
+  availableDeliveryPartners: (schoolId: string) =>
+    api<{ partners: DeliveryPartnerSummary[] }>(`/orders/school/${schoolId}/delivery-partners/available`),
+  approveDeliveryPartner: (schoolId: string, partnerId: string, approved: boolean) =>
+    api(`/orders/school/${schoolId}/delivery-partners/${partnerId}`, { method: "POST", body: { approved } }),
+  assignDeliveryPartner: (schoolId: string, partnerId: string) =>
+    api<{ id: string; batchNumber: string; orderCount: number }>(
+      `/orders/school/${schoolId}/delivery-partners/${partnerId}/assign`,
+      { method: "POST" },
+    ),
   activities: (schoolId: string) => api<{ activities: unknown[] }>(`/schools/${schoolId}/activities`),
   createActivity: (schoolId: string, data: Record<string, unknown>) =>
     api(`/schools/${schoolId}/activities`, { method: "POST", body: data }),
@@ -782,12 +839,19 @@ export interface SchoolOrder {
   updatedAt: string;
   uncollected?: boolean;
   items?: OrderLine[];
-  vendor: { id: string; name: string } | null;
-  student: { id: string; firstName: string; lastName: string; studentNumber: string; grade: string };
+  vendor: { id: string; name: string; contactPhone?: string | null; contactPersonName?: string | null; contactPersonPhone?: string | null } | null;
+  student: { id: string; firstName: string; middleName?: string | null; lastName: string; studentNumber: string; grade: string };
   deliveryBatch?: {
     batchNumber: string;
     status: string;
-    deliveryPartner: { owner: { firstName: string; lastName: string; phoneE164: string | null } } | null;
+    pickedUpAt?: string | null;
+    deliveredAt?: string | null;
+    deliveryPartner: {
+      primaryVehicleType?: string | null;
+      vehiclePlateNumber?: string | null;
+      vehicleTypes?: string[];
+      owner: { firstName: string; lastName: string; phoneE164: string | null };
+    } | null;
   } | null;
 }
 
@@ -862,6 +926,9 @@ export const ordersApi = {
       town: string;
       county: string;
       serviceTowns: string;
+      primaryVehicleType?: string | null;
+      vehiclePlateNumber?: string | null;
+      vehicleTypes?: string[];
       owner: { firstName: string; lastName: string; phoneE164: string | null };
     }>("/orders/driver/me"),
   driverJobs: () => api<{ jobs: DriverJob[] }>("/orders/driver/jobs"),
@@ -911,6 +978,9 @@ export interface AdminDeliveryPartner {
   town: string;
   serviceTowns: string;
   vehicleTypes: string[];
+  primaryVehicleType?: string | null;
+  vehiclePlateNumber?: string | null;
+  logbookFileName?: string | null;
   createdAt: string;
   owner: { id: string; firstName: string; lastName: string; email: string | null; phoneE164: string | null };
   _count: { batches: number };
@@ -939,6 +1009,7 @@ export const adminOpsApi = {
       method: "POST",
     }),
   deliveryPartners: () => api<{ partners: AdminDeliveryPartner[] }>("/admin/delivery-partners"),
+  logbookBlob: (id: string) => apiBlob(`/admin/delivery-partners/${id}/logbook`),
   setDeliveryPartnerStatus: (id: string, status: "APPROVED" | "REJECTED" | "SUSPENDED" | "PENDING") =>
     api<{ id: string; status: string }>(`/admin/delivery-partners/${id}`, { method: "PATCH", body: { status } }),
 };

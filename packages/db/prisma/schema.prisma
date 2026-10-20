@@ -309,6 +309,7 @@ model School {
   settings       SchoolSettings?
   students       Student[]
   schoolVendors  SchoolVendor[]
+  schoolDeliveryPartners SchoolDeliveryPartner[]
   schoolProducts SchoolProduct[]
   deliveryWindows DeliveryWindow[]
   deliveryBatches DeliveryBatch[]
@@ -337,6 +338,7 @@ model Student {
   schoolId          String         @map("school_id")
   studentNumber     String         @map("student_number")
   firstName         String         @map("first_name")
+  middleName        String?        @map("middle_name")
   lastName          String         @map("last_name")
   preferredName     String?        @map("preferred_name")
   grade             String
@@ -381,6 +383,7 @@ model ParentStudentLink {
   relationship      Relationship
   status            LinkStatus   @default(PENDING_SCHOOL_APPROVAL)
   claimedFirstName  String?      @map("claimed_first_name")
+  claimedMiddleName String?      @map("claimed_middle_name")
   claimedLastName   String?      @map("claimed_last_name")
   claimedGrade      String?      @map("claimed_grade")
   classTeacherName  String?      @map("class_teacher_name")
@@ -440,6 +443,9 @@ model Vendor {
   status             VendorStatus @default(PENDING)
   contactEmail       String?      @map("contact_email")
   contactPhone       String?      @map("contact_phone")
+  contactPersonName  String?      @map("contact_person_name")
+  contactPersonPhone String?      @map("contact_person_phone")
+  websiteUrl         String?      @map("website_url")
   ownerUserId        String?      @map("owner_user_id")
   county             String?
   town               String?
@@ -806,16 +812,39 @@ model DeliveryPartner {
   town          String
   serviceTowns  String                @map("service_towns")
   vehicleTypes  Json                  @default("[]") @map("vehicle_types")
+  primaryVehicleType String?          @map("primary_vehicle_type")
+  vehiclePlateNumber String?          @unique @map("vehicle_plate_number")
+  logbookFileName String?             @map("logbook_file_name")
+  logbookMimeType String?             @map("logbook_mime_type")
+  logbookStoredName String?           @map("logbook_stored_name")
   termsAcceptedAt DateTime?           @map("terms_accepted_at")
   createdAt     DateTime              @default(now()) @map("created_at")
   updatedAt     DateTime              @updatedAt @map("updated_at")
 
   owner   User            @relation("DeliveryPartnerOwner", fields: [ownerUserId], references: [id])
   batches DeliveryBatch[]
+  schoolLinks SchoolDeliveryPartner[]
 
   @@index([ownerUserId])
   @@index([status])
   @@map("delivery_partners")
+}
+
+model SchoolDeliveryPartner {
+  id                String   @id @default(uuid())
+  schoolId          String   @map("school_id")
+  deliveryPartnerId String   @map("delivery_partner_id")
+  approved          Boolean  @default(false)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  school          School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  deliveryPartner DeliveryPartner @relation(fields: [deliveryPartnerId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, deliveryPartnerId])
+  @@index([schoolId, approved])
+  @@index([deliveryPartnerId, approved])
+  @@map("school_delivery_partners")
 }
 
 model Notification {

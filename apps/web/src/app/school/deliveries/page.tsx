@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, getPrimaryRole, getDashboardPath } from "@/lib/auth-context";
-import { ordersApi, ApiError, type SchoolOrder } from "@/lib/api";
+import {
+  ordersApi,
+  schoolAdminApi,
+  ApiError,
+  type SchoolOrder,
+  type SchoolDeliveryPartnerRow,
+  type DeliveryPartnerSummary,
+} from "@/lib/api";
 import { orderBadgeClass, orderStatusLabel } from "@/lib/order-status";
 import { PortalLayout } from "@/components/layout/portal-layout";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -23,7 +30,20 @@ const navItems = [
 type Board = Awaited<ReturnType<typeof ordersApi.school>>;
 
 function studentLine(o: SchoolOrder) {
-  return `${o.student.firstName} ${o.student.lastName} · #${o.student.studentNumber} · ${o.student.grade}`;
+  return `${o.student.firstName} ${o.student.middleName ?? ""} ${o.student.lastName} · #${o.student.studentNumber} · ${o.student.grade}`;
+}
+
+function partnerLine(p: DeliveryPartnerSummary) {
+  return `${p.owner.firstName} ${p.owner.lastName} · ${p.owner.phoneE164 ?? "no phone"} · ${p.primaryVehicleType ?? "vehicle"} ${p.vehiclePlateNumber ?? ""} · Base ${p.town}, ${p.county}`;
+}
+
+function timelineLabel(o: SchoolOrder) {
+  if (o.status === "READY_FOR_DISPATCH") return o.deliveryBatch ? "Assigned — awaiting driver pickup" : "Vendor packed — awaiting delivery assignment";
+  if (o.status === "DISPATCHED") return "Assigned — awaiting driver pickup";
+  if (o.status === "IN_TRANSIT") return "Driver picked up — in transit";
+  if (o.status === "RECEIVED_BY_SCHOOL") return "Delivered — received at school";
+  if (o.status === "READY_FOR_COLLECTION") return "Ready for student collection";
+  return o.status;
 }
 
 function SelectableList({
@@ -52,11 +72,15 @@ function SelectableList({
               <p className="text-brand-muted">{studentLine(o)}</p>
               <p className="text-xs text-brand-muted">
                 {o.vendor?.name ?? "Vendor"}
+                {o.vendor?.contactPersonPhone || o.vendor?.contactPhone
+                  ? ` (${o.vendor.contactPersonPhone ?? o.vendor.contactPhone})`
+                  : ""}
                 {o.items ? ` · ${o.items.reduce((s, i) => s + i.quantity, 0)} item(s)` : ""}
                 {showDriver && driver
-                  ? ` · Driver ${driver.firstName} ${driver.lastName}${driver.phoneE164 ? ` (${driver.phoneE164})` : ""}`
+                  ? ` · Driver ${driver.firstName} ${driver.lastName}${driver.phoneE164 ? ` (${driver.phoneE164})` : ""} · ${o.deliveryBatch?.deliveryPartner?.primaryVehicleType ?? "vehicle"} ${o.deliveryBatch?.deliveryPartner?.vehiclePlateNumber ?? ""}`
                   : ""}
               </p>
+              <p className="text-xs font-medium text-brand-teal">{timelineLabel(o)}</p>
             </div>
           </label>
         );
@@ -76,6 +100,8 @@ export default function SchoolDeliveriesPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [partners, setPartners] = useState<SchoolDeliveryPartnerRow[]>([]);
+  const [availablePartners, setAvailablePartners] = useState<DeliveryPartnerSummary[]>([]);
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
@@ -84,8 +110,14 @@ export default function SchoolDeliveriesPage() {
 
   const load = useCallback(async () => {
     if (!schoolId) return;
-    const res = await ordersApi.school(schoolId);
+    const [res, linked, available] = await Promise.all([
+      ordersApi.school(schoolId),
+      schoolAdminApi.deliveryPartners(schoolId).catch(() => ({ partners: [] as SchoolDeliveryPartnerRow[] })),
+      schoolAdminApi.availableDeliveryPartners(schoolId).catch(() => ({ partners: [] as DeliveryPartnerSummary[] })),
+    ]);
     setBoard(res);
+    setPartners(linked.partners);
+    setAvailablePartners(available.partners);
   }, [schoolId]);
 
   useEffect(() => {
@@ -129,6 +161,8 @@ export default function SchoolDeliveriesPage() {
   }
 
   const uncollected = board?.ready.filter((o) => o.uncollected) ?? [];
+  const unassignedReady = board?.incoming.filter((o) => o.status === "READY_FOR_DISPATCH" && !o.deliveryBatch) ?? [];
+  const approvedPartners = partners.filter((p) => p.approved);
 
   return (
     <PortalLayout title="School Admin Portal" navItems={navItems}>
@@ -159,6 +193,81 @@ export default function SchoolDeliveriesPage() {
           </ul>
         </Card>
       )}
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Delivery partners for this school</CardTitle>
+          <CardDescription>
+            Approve which platform-approved delivery agents may deliver here, then assign packed orders to them.
+            Vendor → delivery agent → school handover is tracked below.
+          </CardDescription>
+        </CardHeader>
+        {partners.length === 0 && availablePartners.length === 0 ? (
+          <p className="text-sm text-brand-muted">No delivery partners available yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {partners.map((row) => (
+              <div key={row.id} className="flex flex-col gap-3 rounded-xl border border-gray-100 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm">
+                  <p className="font-medium text-brand-ink">{partnerLine(row.deliveryPartner)}</p>
+                  <p className="text-xs text-brand-muted">Serves: {row.deliveryPartner.serviceTowns}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${row.approved ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+                    {row.approved ? "Approved" : "Not approved"}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() =>
+                      run(async () => {
+                        await schoolAdminApi.approveDeliveryPartner(schoolId, row.deliveryPartner.id, !row.approved);
+                        return `${row.deliveryPartner.owner.firstName} ${row.approved ? "revoked" : "approved"} for this school`;
+                      })
+                    }
+                  >
+                    {row.approved ? "Revoke" : "Approve"}
+                  </Button>
+                  {row.approved && unassignedReady.length > 0 && (
+                    <Button
+                      disabled={busy}
+                      onClick={() =>
+                        run(async () => {
+                          const batch = await schoolAdminApi.assignDeliveryPartner(schoolId, row.deliveryPartner.id);
+                          return `Assigned ${batch.orderCount} parcel(s) to ${row.deliveryPartner.owner.firstName} (${batch.batchNumber})`;
+                        })
+                      }
+                    >
+                      Assign {unassignedReady.length} ready parcel(s)
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {availablePartners.map((p) => (
+              <div key={p.id} className="flex flex-col gap-3 rounded-xl border border-dashed border-gray-200 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-medium text-brand-ink">{partnerLine(p)}</p>
+                <Button
+                  disabled={busy}
+                  onClick={() =>
+                    run(async () => {
+                      await schoolAdminApi.approveDeliveryPartner(schoolId, p.id, true);
+                      return `${p.owner.firstName} approved for this school`;
+                    })
+                  }
+                >
+                  Add &amp; approve
+                </Button>
+              </div>
+            ))}
+            {unassignedReady.length > 0 && approvedPartners.length === 0 && (
+              <p className="text-sm text-amber-700">
+                {unassignedReady.length} parcel(s) are packed by vendors and waiting — approve a delivery partner above to assign them.
+              </p>
+            )}
+          </div>
+        )}
+      </Card>
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>

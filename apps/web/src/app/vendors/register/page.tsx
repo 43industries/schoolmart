@@ -32,6 +32,9 @@ export default function VendorRegisterPage() {
     lastName: "",
     email: "",
     phone: "",
+    businessContactPerson: "",
+    businessContactPhone: "",
+    website: "",
     password: "",
     description: "",
     branchNetwork: "",
@@ -63,11 +66,16 @@ export default function VendorRegisterPage() {
         return;
       }
       if (!form.email.trim() || !form.phone.trim()) {
-        setError("Both email and telephone are required");
+        setError("Business email and your telephone are required");
+        return;
+      }
+      if (!form.businessContactPerson.trim() || !form.businessContactPhone.trim()) {
+        setError("Business contact person and their telephone are required");
         return;
       }
       await vendorsApi.register({
         ...form,
+        website: form.website.trim() || undefined,
         description: form.description || undefined,
         addressLine: form.addressLine || undefined,
         sellCategories: categories,
@@ -97,7 +105,10 @@ export default function VendorRegisterPage() {
         <Card>
           <CardHeader>
             <CardTitle>Vendor Registration</CardTitle>
-            <CardDescription>Both email and telephone are required. Applications start as pending approval.</CardDescription>
+            <CardDescription>
+              Use a business email (not a personal email). Business contact person, telephone, and address are required.
+              Applications start as pending approval.
+            </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
@@ -112,9 +123,44 @@ export default function VendorRegisterPage() {
               <Input label="First Name" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} required />
               <Input label="Last Name" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} required />
             </div>
-            <Input label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
-            <Input label="Telephone (Kenya)" type="tel" placeholder="0712345678" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required />
+            <div>
+              <Input label="Business Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+              <p className="mt-1 text-xs text-brand-muted">
+                Please use a <strong>business email</strong> for the vendor account — not a personal email.
+              </p>
+            </div>
+            <Input label="Your Telephone (Kenya)" type="tel" placeholder="0712345678" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required />
             <Input label="Password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+
+            <div className="border-t border-gray-100 pt-4">
+              <p className="mb-3 text-sm font-semibold text-brand-ink">Business Contact Person</p>
+              <div className="space-y-4">
+                <Input
+                  label="Business Contact Person (Full Name)"
+                  value={form.businessContactPerson}
+                  onChange={(e) => setForm({ ...form, businessContactPerson: e.target.value })}
+                  required
+                />
+                <Input
+                  label="Business Contact Telephone (Kenya)"
+                  type="tel"
+                  placeholder="0712345678"
+                  value={form.businessContactPhone}
+                  onChange={(e) => setForm({ ...form, businessContactPhone: e.target.value })}
+                  required
+                />
+                <div>
+                  <Input
+                    label="Website (optional)"
+                    type="url"
+                    placeholder="https://example.co.ke"
+                    value={form.website}
+                    onChange={(e) => setForm({ ...form, website: e.target.value })}
+                  />
+                  <p className="mt-1 text-xs text-brand-muted">Business website, if you have one.</p>
+                </div>
+              </div>
+            </div>
             <Input label="Short Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
 
             <div>

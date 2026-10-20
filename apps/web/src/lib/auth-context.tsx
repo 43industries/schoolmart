@@ -67,7 +67,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const gen = ++authGen.current;
     const result = await authApi.login({ identifier: identifier.trim(), password });
     setAccessToken(result.accessToken);
-    const profile = await authApi.me();
+    // Profile rides along with the login response; only fall back to /users/me
+    // for older API deployments that don't return it yet.
+    const profile = result.profile ?? (await authApi.me());
     if (gen !== authGen.current) return profile;
     setUser(profile);
     setLoading(false);

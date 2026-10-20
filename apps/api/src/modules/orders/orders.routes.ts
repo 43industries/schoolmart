@@ -17,6 +17,10 @@ import { cancelOrderByParent } from "./order-lifecycle.service.js";
 import {
   VENDOR_SETTABLE_STATUSES,
   acceptDriverJob,
+  approveSchoolDeliveryPartner,
+  assignSchoolDelivery,
+  listAvailableDeliveryPartnersForSchool,
+  listSchoolDeliveryPartners,
   deliverBatch,
   failBatch,
   getDriverProfile,
@@ -137,6 +141,40 @@ export async function orderRoutes(app: FastifyInstance) {
         ctx: auditContextFromRequest(req, req.user!.sub),
       }),
     );
+  });
+
+  app.get("/school/:id/delivery-partners", { preHandler: [authenticate, requireSchoolAdmin("id")] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    return reply.send({ partners: await listSchoolDeliveryPartners(id) });
+  });
+
+  app.get("/school/:id/delivery-partners/available", { preHandler: [authenticate, requireSchoolAdmin("id")] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    return reply.send({ partners: await listAvailableDeliveryPartnersForSchool(id) });
+  });
+
+  app.post("/school/:id/delivery-partners/:partnerId", { preHandler: [authenticate, requireSchoolAdmin("id")] }, async (req, reply) => {
+    const { id, partnerId } = req.params as { id: string; partnerId: string };
+    const body = z.object({ approved: z.boolean() }).safeParse(req.body);
+    if (!body.success) throw new ValidationError("Validation failed");
+    const link = await approveSchoolDeliveryPartner(
+      id,
+      partnerId,
+      body.data.approved,
+      auditContextFromRequest(req, req.user!.sub),
+    );
+    return reply.send(link);
+  });
+
+  app.post("/school/:id/delivery-partners/:partnerId/assign", { preHandler: [authenticate, requireSchoolAdmin("id")] }, async (req, reply) => {
+    const { id, partnerId } = req.params as { id: string; partnerId: string };
+    const batch = await assignSchoolDelivery({
+      schoolId: id,
+      partnerId,
+      actorUserId: req.user!.sub,
+      ctx: auditContextFromRequest(req, req.user!.sub),
+    });
+    return reply.status(201).send(batch);
   });
 
   app.post(

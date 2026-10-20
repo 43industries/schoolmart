@@ -38,8 +38,21 @@ export const phoneSchema = z
     return normalized;
   });
 
+/** Join first/middle/last names, skipping blanks. */
+export function formatPersonName(parts: {
+  firstName?: string | null;
+  middleName?: string | null;
+  lastName?: string | null;
+}): string {
+  return [parts.firstName, parts.middleName, parts.lastName]
+    .map((p) => p?.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 export const childOnboardingSchema = z.object({
   firstName: z.string().min(1).max(100),
+  middleName: z.string().max(100).optional(),
   lastName: z.string().min(1).max(100),
   schoolId: z.string().uuid(),
   /** Admission number — unique with school, not a global DB primary key */
@@ -95,6 +108,7 @@ export const updateSchoolSchema = createSchoolSchema.partial().extend({
 export const createStudentSchema = z.object({
   studentNumber: z.string().min(1).max(50),
   firstName: z.string().min(1).max(100),
+  middleName: z.string().max(100).optional(),
   lastName: z.string().min(1).max(100),
   preferredName: z.string().max(100).optional(),
   grade: z.string().min(1).max(50),
@@ -132,12 +146,26 @@ export const updateVendorSchema = createVendorSchema.partial().extend({
   status: z.enum(VENDOR_STATUSES).optional(),
 });
 
+const websiteSchema = z
+  .string()
+  .max(500)
+  .transform((v) => {
+    const trimmed = v.trim();
+    if (!trimmed) return trimmed;
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  })
+  .pipe(z.string().url("Enter a valid website URL"));
+
 export const registerVendorSchema = z.object({
   businessName: z.string().min(2).max(200),
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
+  /** Business email — emphasised in UI as not a personal email. */
   email: emailSchema,
   phone: phoneSchema,
+  businessContactPerson: z.string().min(1).max(150),
+  businessContactPhone: phoneSchema,
+  website: z.union([websiteSchema, z.literal("")]).optional(),
   password: passwordSchema,
   description: z.string().max(2000).optional(),
   branchNetwork: z.string().min(1).max(2000),
@@ -332,20 +360,43 @@ export const confirmActivityRegistrationSchema = z.object({
   registrationId: z.string().uuid(),
 });
 
-export const registerDeliveryPartnerSchema = z.object({
-  firstName: z.string().min(1).max(100),
-  lastName: z.string().min(1).max(100),
-  email: emailSchema,
-  phone: phoneSchema,
-  password: passwordSchema,
-  county: z.string().min(2).max(100),
-  town: z.string().min(2).max(100),
-  serviceTowns: z.string().min(2).max(2000),
-  vehicleTypes: z.array(z.enum(VEHICLE_TYPES)).min(1, "Select at least one vehicle type"),
-  acceptTerms: z.literal(true, {
-    errorMap: () => ({ message: "You must accept the delivery partner terms" }),
-  }),
-});
+/** Normalise a Kenyan vehicle plate: uppercase, collapse whitespace. */
+export function normalizeVehiclePlate(value: string): string {
+  return value.trim().toUpperCase().replace(/\s+/g, " ");
+}
+
+export const vehiclePlateSchema = z
+  .string()
+  .transform((v) => normalizeVehiclePlate(v))
+  .pipe(
+    z
+      .string()
+      .min(5, "Enter the vehicle registration / plate number")
+      .max(20)
+      .regex(/^[A-Z0-9][A-Z0-9 -]*$/, "Plate number may only contain letters, numbers, spaces and hyphens"),
+  );
+
+export const registerDeliveryPartnerSchema = z
+  .object({
+    firstName: z.string().min(1).max(100),
+    lastName: z.string().min(1).max(100),
+    email: emailSchema,
+    phone: phoneSchema,
+    password: passwordSchema,
+    county: z.string().min(2).max(100),
+    town: z.string().min(2).max(100),
+    serviceTowns: z.string().min(2).max(2000),
+    vehicleTypes: z.array(z.enum(VEHICLE_TYPES)).min(1, "Select at least one vehicle type"),
+    primaryVehicleType: z.enum(VEHICLE_TYPES),
+    vehiclePlateNumber: vehiclePlateSchema,
+    acceptTerms: z.literal(true, {
+      errorMap: () => ({ message: "You must accept the delivery partner terms" }),
+    }),
+  })
+  .refine((data) => data.vehicleTypes.includes(data.primaryVehicleType), {
+    message: "Primary vehicle type must be one of the selected vehicle types",
+    path: ["primaryVehicleType"],
+  });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

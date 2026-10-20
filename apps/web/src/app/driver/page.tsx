@@ -84,6 +84,10 @@ export default function DriverPage() {
         <h2 className="text-2xl font-bold text-brand-ink">Delivery jobs</h2>
         <p className="text-brand-muted">
           Accept a school run, collect packed parcels from vendors, and hand them over at the school collection point.
+          {profile?.vehiclePlateNumber
+            ? ` Your vehicle: ${profile.primaryVehicleType ?? ""} · ${profile.vehiclePlateNumber}.`
+            : ""}{" "}
+          Jobs only appear for schools that have approved you as their delivery partner; schools may also assign runs directly to you.
         </p>
       </div>
 

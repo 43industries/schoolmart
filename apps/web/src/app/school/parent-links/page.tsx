@@ -23,10 +23,11 @@ interface PendingLink {
   id: string;
   relationship: string;
   claimedFirstName?: string | null;
+  claimedMiddleName?: string | null;
   claimedLastName?: string | null;
   classTeacherName?: string | null;
   createdAt: string;
-  student: { firstName: string; lastName: string; studentNumber: string; grade: string };
+  student: { firstName: string; middleName?: string | null; lastName: string; studentNumber: string; grade: string };
   parentProfile: { user: { firstName: string; lastName: string; email: string | null; phoneE164: string | null } };
 }
 
@@ -104,10 +105,10 @@ export default function ParentLinksPage() {
                     </span>
                   </p>
                   <p className="text-sm text-brand-muted">
-                    Claims: {link.claimedFirstName ?? "—"} {link.claimedLastName ?? ""} · Admission #{link.student.studentNumber}
+                    Claims: {link.claimedFirstName ?? "—"} {link.claimedMiddleName ?? ""} {link.claimedLastName ?? ""} · Admission #{link.student.studentNumber}
                   </p>
                   <p className="text-sm text-brand-muted">
-                    School record: {link.student.firstName} {link.student.lastName} ({link.student.grade})
+                    School record: {link.student.firstName} {link.student.middleName ?? ""} {link.student.lastName} ({link.student.grade})
                   </p>
                   {link.classTeacherName && (
                     <p className="text-sm text-brand-muted">Class teacher: {link.classTeacherName}</p>

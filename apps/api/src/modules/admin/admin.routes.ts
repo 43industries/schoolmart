@@ -4,7 +4,9 @@ import { settleVendorPayoutSchema } from "@schoolmart/shared";
 import { prisma, OrderStatus, DeliveryPartnerStatus } from "@schoolmart/db";
 import { authenticate, requireSuperAdmin, requireSuperAdminOrFinance } from "../../middleware/auth.js";
 import { auditContextFromRequest, writeAuditLog } from "../audit/audit.service.js";
-import { NotFoundError, ValidationError } from "../../lib/errors.js";
+import { createReadStream } from "node:fs";
+import { AppError, NotFoundError, ValidationError } from "../../lib/errors.js";
+import { getLogbookPath } from "../uploads/uploads.service.js";
 import {
   listOpenVendorPayables,
   listVendorPayouts,
@@ -137,12 +139,28 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.send({ partners });
   });
 
+  app.get("/delivery-partners/:id/logbook", { preHandler: [authenticate, requireSuperAdmin()] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const partner = await prisma.deliveryPartner.findUnique({ where: { id } });
+    if (!partner?.logbookStoredName) throw new NotFoundError("No logbook on file for this delivery partner");
+    return reply
+      .header("Content-Type", partner.logbookMimeType ?? "application/octet-stream")
+      .header(
+        "Content-Disposition",
+        `inline; filename="${(partner.logbookFileName ?? "logbook").replace(/"/g, "")}"`,
+      )
+      .send(createReadStream(getLogbookPath(partner.logbookStoredName)));
+  });
+
   app.patch("/delivery-partners/:id", { preHandler: [authenticate, requireSuperAdmin()] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const parsed = partnerStatusSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError("Validation failed", parsed.error.flatten());
     const existing = await prisma.deliveryPartner.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError("Delivery partner not found");
+    if (parsed.data.status === "APPROVED" && !existing.logbookStoredName) {
+      throw new AppError(400, "Cannot approve a delivery partner without a vehicle logbook on file");
+    }
     const partner = await prisma.deliveryPartner.update({
       where: { id },
       data: { status: parsed.data.status as DeliveryPartnerStatus },

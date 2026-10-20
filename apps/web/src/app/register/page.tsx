@@ -27,6 +27,7 @@ export default function RegisterPage() {
     phone: "",
     password: "",
     childFirstName: "",
+    childMiddleName: "",
     childLastName: "",
     schoolId: "",
     grade: "",
@@ -54,6 +55,7 @@ export default function RegisterPage() {
         password: form.password,
         child: {
           firstName: form.childFirstName,
+          middleName: form.childMiddleName || undefined,
           lastName: form.childLastName,
           schoolId: form.schoolId,
           grade: form.grade,
@@ -131,6 +133,11 @@ export default function RegisterPage() {
                       required
                     />
                   </div>
+                  <Input
+                    label="Child Middle Name (optional)"
+                    value={form.childMiddleName}
+                    onChange={(e) => setForm({ ...form, childMiddleName: e.target.value })}
+                  />
                   <Select
                     label="School"
                     value={form.schoolId}

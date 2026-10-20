@@ -93,9 +93,32 @@ export default function AdminDeliveryPartnersPage() {
                 <p className="text-brand-muted">
                   Base {p.town}, {p.county} · {(p.vehicleTypes ?? []).join(", ")} · {p._count.batches} run(s)
                 </p>
+                <p className="text-brand-muted">
+                  Primary vehicle: {p.primaryVehicleType ?? "—"} · Plate: {p.vehiclePlateNumber ?? "—"} · Logbook:{" "}
+                  {p.logbookFileName ?? "not on file"}
+                </p>
                 <p className="text-xs text-brand-muted">Serves: {p.serviceTowns}</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                {p.logbookFileName && (
+                  <Button
+                    variant="secondary"
+                    disabled={busyId === p.id}
+                    onClick={async () => {
+                      setBusyId(p.id);
+                      try {
+                        const blob = await adminOpsApi.logbookBlob(p.id);
+                        window.open(URL.createObjectURL(blob), "_blank");
+                      } catch (err) {
+                        setError(err instanceof ApiError ? err.message : "Could not open logbook");
+                      } finally {
+                        setBusyId(null);
+                      }
+                    }}
+                  >
+                    View logbook
+                  </Button>
+                )}
                 {p.status !== "APPROVED" && (
                   <Button disabled={busyId === p.id} onClick={() => setStatus(p.id, "APPROVED")}>
                     Approve

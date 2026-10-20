@@ -1,4 +1,4 @@
-import { PrismaClient, Role, ScopeType, UserStatus, SchoolStatus, LinkStatus, Relationship, VendorStatus, ProductStatus } from "@prisma/client";
+import { PrismaClient, Role, ScopeType, UserStatus, SchoolStatus, LinkStatus, Relationship, VendorStatus, ProductStatus, DeliveryPartnerStatus, OrderStatus } from "@prisma/client";
 import argon2 from "argon2";
 import { randomBytes } from "crypto";
 
@@ -7,7 +7,13 @@ const prisma = new PrismaClient();
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "Demo@SchoolMart2026";
 
 async function hashPassword(password: string): Promise<string> {
-  return argon2.hash(password, { type: argon2.argon2id });
+  // Match apps/api crypto params so demo verifies are fast on small hosts.
+  return argon2.hash(password, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 });
+}
+
+/** Re-seeding must repair demo logins: reset password, reactivate, re-verify. */
+function demoUserRepair(passwordHash: string) {
+  return { passwordHash, status: UserStatus.ACTIVE, emailVerifiedAt: new Date(), phoneVerifiedAt: new Date() };
 }
 
 async function hashPin(pin: string): Promise<string> {
@@ -35,7 +41,7 @@ async function main() {
   // Super Admin
   const superAdmin = await prisma.user.upsert({
     where: { email: "admin@schoolmart.demo" },
-    update: {},
+    update: demoUserRepair(passwordHash),
     create: {
       email: "admin@schoolmart.demo",
       passwordHash,
@@ -53,7 +59,7 @@ async function main() {
   // Finance staff
   await prisma.user.upsert({
     where: { email: "finance@schoolmart.demo" },
-    update: {},
+    update: demoUserRepair(passwordHash),
     create: {
       email: "finance@schoolmart.demo",
       passwordHash,
@@ -71,7 +77,7 @@ async function main() {
   // Support staff
   await prisma.user.upsert({
     where: { email: "support@schoolmart.demo" },
-    update: {},
+    update: demoUserRepair(passwordHash),
     create: {
       email: "support@schoolmart.demo",
       passwordHash,
@@ -135,7 +141,7 @@ async function main() {
   // School admins
   const schoolAdmin1 = await prisma.user.upsert({
     where: { email: "admin@greenfield.demo" },
-    update: {},
+    update: demoUserRepair(passwordHash),
     create: {
       email: "admin@greenfield.demo",
       passwordHash,
@@ -151,7 +157,7 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: "admin@sunrise.demo" },
-    update: {},
+    update: demoUserRepair(passwordHash),
     create: {
       email: "admin@sunrise.demo",
       passwordHash,
@@ -178,7 +184,7 @@ async function main() {
   for (const p of parentData) {
     const parent = await prisma.user.upsert({
       where: { email: p.email },
-      update: {},
+      update: demoUserRepair(passwordHash),
       create: {
         email: p.email,
         phoneE164: p.phone,
@@ -325,7 +331,7 @@ async function main() {
   // Vendor owner accounts (can log in at /login → /vendor)
   const kitchenOwner = await prisma.user.upsert({
     where: { email: "vendor.kitchen@demo.ke" },
-    update: {},
+    update: demoUserRepair(passwordHash),
     create: {
       email: "vendor.kitchen@demo.ke",
       phoneE164: "+254712345010",
@@ -339,7 +345,7 @@ async function main() {
   });
   const stationeryOwner = await prisma.user.upsert({
     where: { email: "vendor.stationery@demo.ke" },
-    update: {},
+    update: demoUserRepair(passwordHash),
     create: {
       email: "vendor.stationery@demo.ke",
       phoneE164: "+254712345011",
@@ -357,6 +363,10 @@ async function main() {
     update: {
       ownerUserId: kitchenOwner.id,
       contactEmail: "vendor.kitchen@demo.ke",
+      contactPhone: "+254712345010",
+      contactPersonName: "[DEMO] Amina Kitchen",
+      contactPersonPhone: "+254712345010",
+      websiteUrl: "https://campus-kitchen.demo.ke",
       status: VendorStatus.APPROVED,
     },
     create: {
@@ -365,6 +375,9 @@ async function main() {
       description: "School-approved meal vendor",
       contactEmail: "vendor.kitchen@demo.ke",
       contactPhone: "+254712345010",
+      contactPersonName: "[DEMO] Amina Kitchen",
+      contactPersonPhone: "+254712345010",
+      websiteUrl: "https://campus-kitchen.demo.ke",
       ownerUserId: kitchenOwner.id,
       county: "Nairobi",
       town: "Westlands",
@@ -377,6 +390,10 @@ async function main() {
     update: {
       ownerUserId: stationeryOwner.id,
       contactEmail: "vendor.stationery@demo.ke",
+      contactPhone: "+254712345011",
+      contactPersonName: "[DEMO] Brian Stationery",
+      contactPersonPhone: "+254712345011",
+      websiteUrl: "https://stationery-hub.demo.ke",
       status: VendorStatus.APPROVED,
     },
     create: {
@@ -385,6 +402,9 @@ async function main() {
       description: "Exercise books, pens, and supplies",
       contactEmail: "vendor.stationery@demo.ke",
       contactPhone: "+254712345011",
+      contactPersonName: "[DEMO] Brian Stationery",
+      contactPersonPhone: "+254712345011",
+      websiteUrl: "https://stationery-hub.demo.ke",
       ownerUserId: stationeryOwner.id,
       county: "Nairobi",
       town: "CBD",
@@ -501,6 +521,85 @@ async function main() {
   }
   console.log(`✓ School catalog: Greenfield & Sunrise approved`);
 
+  // Demo delivery partner (can log in at /login → /driver)
+  const driverOwner = await prisma.user.upsert({
+    where: { email: "driver@demo.ke" },
+    update: demoUserRepair(passwordHash),
+    create: {
+      email: "driver@demo.ke",
+      phoneE164: "+254712345030",
+      passwordHash,
+      firstName: "[DEMO] David",
+      lastName: "Driver",
+      status: UserStatus.ACTIVE,
+      emailVerifiedAt: new Date(),
+      phoneVerifiedAt: new Date(),
+    },
+  });
+  const demoPartner = await prisma.deliveryPartner.upsert({
+    where: { vehiclePlateNumber: "KCX 123A" },
+    update: {
+      ownerUserId: driverOwner.id,
+      status: DeliveryPartnerStatus.APPROVED,
+      primaryVehicleType: "VAN",
+      logbookFileName: "demo-logbook.pdf",
+      logbookMimeType: "application/pdf",
+      logbookStoredName: "demo-logbook.pdf",
+    },
+    create: {
+      ownerUserId: driverOwner.id,
+      status: DeliveryPartnerStatus.APPROVED,
+      county: "Nairobi",
+      town: "Karen",
+      serviceTowns: "Karen, Thika, Nyali",
+      vehicleTypes: ["VAN", "PICKUP"],
+      primaryVehicleType: "VAN",
+      vehiclePlateNumber: "KCX 123A",
+      logbookFileName: "demo-logbook.pdf",
+      logbookMimeType: "application/pdf",
+      logbookStoredName: "demo-logbook.pdf",
+      termsAcceptedAt: new Date(),
+    },
+  });
+  const driverRole = await prisma.userRole.findFirst({ where: { userId: driverOwner.id, role: Role.DRIVER } });
+  if (driverRole) {
+    await prisma.userRole.update({ where: { id: driverRole.id }, data: { scopeType: ScopeType.PLATFORM, scopeId: demoPartner.id } });
+  } else {
+    await prisma.userRole.create({
+      data: { userId: driverOwner.id, role: Role.DRIVER, scopeType: ScopeType.PLATFORM, scopeId: demoPartner.id },
+    });
+  }
+  for (const school of [greenfield!, sunrise!]) {
+    await prisma.schoolDeliveryPartner.upsert({
+      where: { schoolId_deliveryPartnerId: { schoolId: school.id, deliveryPartnerId: demoPartner.id } },
+      update: { approved: true },
+      create: { schoolId: school.id, deliveryPartnerId: demoPartner.id, approved: true },
+    });
+  }
+  console.log(`✓ Delivery partner: driver@demo.ke (plate KCX 123A)`);
+
+  // A couple of packed, unassigned orders so the school assignment flow is demoable.
+  for (const [idx, student] of [students[0]!, students[2]!].entries()) {
+    await prisma.order.upsert({
+      where: { orderNumber: `DEMO-READY-${idx + 1}` },
+      update: { status: OrderStatus.READY_FOR_DISPATCH, deliveryBatchId: null },
+      create: {
+        orderNumber: `DEMO-READY-${idx + 1}`,
+        parentUserId: parents[idx]!.id,
+        studentId: student.id,
+        schoolId: greenfield!.id,
+        vendorId: kitchen.id,
+        status: OrderStatus.READY_FOR_DISPATCH,
+        subtotalMinor: 35000,
+        totalMinor: 35000,
+        items: {
+          create: { productId: lunch.id, productName: lunch.name, quantity: 1, unitPriceMinor: 35000, totalMinor: 35000 },
+        },
+      },
+    });
+  }
+  console.log(`✓ Demo dispatch: 2 READY_FOR_DISPATCH orders awaiting school assignment`);
+
   console.log(`\n✅ Seed complete!`);
   console.log(`\nDemo password for all accounts: ${DEMO_PASSWORD}`);
   console.log(`Demo student collection PIN: 1234`);
@@ -511,6 +610,7 @@ async function main() {
   console.log(`  Student:      student.brian@demo.ke`);
   console.log(`  Vendor:       vendor.kitchen@demo.ke`);
   console.log(`  Vendor:       vendor.stationery@demo.ke`);
+  console.log(`  Driver:       driver@demo.ke`);
 }
 
 main()

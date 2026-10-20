@@ -9,3 +9,5 @@ coverage
 .DS_Store
 /uploads
 apps/api/uploads
+private-uploads
+apps/api/private-uploads

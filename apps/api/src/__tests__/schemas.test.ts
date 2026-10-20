@@ -1,11 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { registerSchema, loginSchema, createSchoolSchema } from "@schoolmart/shared";
+import {
+  registerSchema,
+  loginSchema,
+  createSchoolSchema,
+  registerVendorSchema,
+  registerDeliveryPartnerSchema,
+  normalizeVehiclePlate,
+} from "@schoolmart/shared";
 
 const child = {
   firstName: "Amina",
   lastName: "Doe",
   schoolId: "11111111-1111-1111-1111-111111111111",
   studentNumber: "GF-2024-001",
+  grade: "Grade 5",
   classTeacherName: "Mrs. Wanjiku",
   relationship: "MOTHER" as const,
 };
@@ -63,6 +71,92 @@ describe("registerSchema", () => {
       firstName: "John",
       lastName: "Doe",
       child,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("child middle name", () => {
+  it("accepts an optional middle name and rejects over-long ones", () => {
+    const ok = registerSchema.safeParse({
+      email: "test@example.com",
+      password: "Password1",
+      firstName: "John",
+      lastName: "Doe",
+      child: { ...child, middleName: "Mwangi" },
+    });
+    expect(ok.success).toBe(true);
+    const bad = registerSchema.safeParse({
+      email: "test@example.com",
+      password: "Password1",
+      firstName: "John",
+      lastName: "Doe",
+      child: { ...child, middleName: "x".repeat(101) },
+    });
+    expect(bad.success).toBe(false);
+  });
+});
+
+describe("registerVendorSchema", () => {
+  const vendor = {
+    businessName: "Campus Kitchen",
+    firstName: "Amina",
+    lastName: "Owner",
+    email: "orders@campus-kitchen.co.ke",
+    phone: "0712345678",
+    businessContactPerson: "Amina Manager",
+    businessContactPhone: "0722345678",
+    password: "Password1",
+    branchNetwork: "Nairobi and Thika",
+    county: "Nairobi",
+    town: "Westlands",
+    sellCategories: ["MEALS_SNACKS" as const],
+    acceptVendorTerms: true as const,
+    acceptPlatformAgreement: true as const,
+  };
+
+  it("accepts business contact details and normalises a bare website domain", () => {
+    const result = registerVendorSchema.safeParse({ ...vendor, website: "campus-kitchen.co.ke" });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.website).toBe("https://campus-kitchen.co.ke");
+      expect(result.data.businessContactPhone).toBe("+254722345678");
+    }
+  });
+
+  it("rejects a missing business contact telephone or invalid website", () => {
+    expect(registerVendorSchema.safeParse({ ...vendor, businessContactPhone: "" }).success).toBe(false);
+    expect(registerVendorSchema.safeParse({ ...vendor, website: "not a url" }).success).toBe(false);
+  });
+});
+
+describe("registerDeliveryPartnerSchema", () => {
+  const partner = {
+    firstName: "David",
+    lastName: "Driver",
+    email: "driver@example.com",
+    phone: "0712345678",
+    password: "Password1",
+    county: "Nairobi",
+    town: "Karen",
+    serviceTowns: "Karen",
+    vehicleTypes: ["VAN" as const],
+    primaryVehicleType: "VAN" as const,
+    acceptTerms: true as const,
+  };
+
+  it("normalises the vehicle plate", () => {
+    expect(normalizeVehiclePlate("  kcx   123a ")).toBe("KCX 123A");
+    const result = registerDeliveryPartnerSchema.safeParse({ ...partner, vehiclePlateNumber: "kcx 123a" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.vehiclePlateNumber).toBe("KCX 123A");
+  });
+
+  it("rejects a primary vehicle that is not among the selected types", () => {
+    const result = registerDeliveryPartnerSchema.safeParse({
+      ...partner,
+      vehiclePlateNumber: "KCX 123A",
+      primaryVehicleType: "BODA",
     });
     expect(result.success).toBe(false);
   });

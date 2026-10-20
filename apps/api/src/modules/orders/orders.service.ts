@@ -14,9 +14,9 @@ import { refundOrderToWallet, transitionOrders } from "./order-lifecycle.service
 
 const orderListInclude = {
   items: { select: { id: true, productName: true, quantity: true, totalMinor: true } },
-  vendor: { select: { id: true, name: true } },
+  vendor: { select: { id: true, name: true, contactPhone: true, contactPersonName: true, contactPersonPhone: true } },
   school: { select: { id: true, name: true, town: true } },
-  student: { select: { id: true, firstName: true, lastName: true, studentNumber: true, grade: true } },
+  student: { select: { id: true, firstName: true, middleName: true, lastName: true, studentNumber: true, grade: true } },
   statusHistory: {
     orderBy: { createdAt: "asc" as const },
     select: { id: true, fromStatus: true, toStatus: true, note: true, createdAt: true },
@@ -174,7 +174,16 @@ export async function listSchoolOrders(schoolId: string) {
         select: {
           batchNumber: true,
           status: true,
-          deliveryPartner: { select: { owner: { select: { firstName: true, lastName: true, phoneE164: true } } } },
+          pickedUpAt: true,
+          deliveredAt: true,
+          deliveryPartner: {
+            select: {
+              primaryVehicleType: true,
+              vehiclePlateNumber: true,
+              vehicleTypes: true,
+              owner: { select: { firstName: true, lastName: true, phoneE164: true } },
+            },
+          },
         },
       },
     },
@@ -313,11 +322,162 @@ export async function getDriverProfile(partnerId: string) {
   return getApprovedPartner(partnerId);
 }
 
-/** Packed orders without a batch, grouped by school. */
+async function assertSchoolApprovedPartner(schoolId: string, partnerId: string) {
+  const link = await prisma.schoolDeliveryPartner.findUnique({
+    where: { schoolId_deliveryPartnerId: { schoolId, deliveryPartnerId: partnerId } },
+  });
+  if (!link?.approved) {
+    throw new ForbiddenError("This school has not approved you as a delivery partner");
+  }
+}
+
+/** Create a PLANNED batch claiming all packed, unbatched orders for a school. Shared by driver self-accept and school assignment. */
+async function createDeliveryBatchForSchool(
+  tx: Prisma.TransactionClient,
+  params: { schoolId: string; partnerId: string; actorUserId: string },
+) {
+  const candidates = await tx.order.findMany({
+    where: { schoolId: params.schoolId, status: OrderStatus.READY_FOR_DISPATCH, deliveryBatchId: null },
+    select: { id: true, orderNumber: true, vendorId: true },
+  });
+  if (candidates.length === 0) throw new AppError(409, "No packed orders are waiting for this school");
+
+  const created = await tx.deliveryBatch.create({
+    data: {
+      schoolId: params.schoolId,
+      deliveryPartnerId: params.partnerId,
+      batchNumber: `DB-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`,
+      deliveryDate: new Date(),
+      status: DeliveryBatchStatus.PLANNED,
+      orderCount: 0,
+      manifest: { orders: candidates.map((c) => c.orderNumber) },
+    },
+  });
+
+  const claimed = await tx.order.updateMany({
+    where: { id: { in: candidates.map((c) => c.id) }, deliveryBatchId: null, status: OrderStatus.READY_FOR_DISPATCH },
+    data: { deliveryBatchId: created.id },
+  });
+  if (claimed.count === 0) throw new AppError(409, "These orders were just taken by another agent");
+
+  const claimedIds = (
+    await tx.order.findMany({ where: { deliveryBatchId: created.id }, select: { id: true } })
+  ).map((o) => o.id);
+
+  await transitionOrders({
+    orderIds: claimedIds,
+    from: [OrderStatus.READY_FOR_DISPATCH],
+    to: OrderStatus.DISPATCHED,
+    actorUserId: params.actorUserId,
+    tx,
+  });
+
+  return tx.deliveryBatch.update({
+    where: { id: created.id },
+    data: { orderCount: claimedIds.length },
+  });
+}
+
+// ─── School ↔ delivery partners ──────────────────────────────────────────────
+
+const deliveryPartnerSummary = {
+  id: true,
+  status: true,
+  county: true,
+  town: true,
+  serviceTowns: true,
+  vehicleTypes: true,
+  primaryVehicleType: true,
+  vehiclePlateNumber: true,
+  owner: { select: { id: true, firstName: true, lastName: true, email: true, phoneE164: true } },
+} satisfies Prisma.DeliveryPartnerSelect;
+
+export async function listSchoolDeliveryPartners(schoolId: string) {
+  return prisma.schoolDeliveryPartner.findMany({
+    where: { schoolId },
+    include: { deliveryPartner: { select: deliveryPartnerSummary } },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export async function listAvailableDeliveryPartnersForSchool(schoolId: string) {
+  const linked = await prisma.schoolDeliveryPartner.findMany({
+    where: { schoolId },
+    select: { deliveryPartnerId: true },
+  });
+  const linkedIds = linked.map((l) => l.deliveryPartnerId);
+  return prisma.deliveryPartner.findMany({
+    where: {
+      status: DeliveryPartnerStatus.APPROVED,
+      ...(linkedIds.length ? { id: { notIn: linkedIds } } : {}),
+    },
+    select: deliveryPartnerSummary,
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export async function approveSchoolDeliveryPartner(
+  schoolId: string,
+  partnerId: string,
+  approved: boolean,
+  ctx: AuditContext,
+) {
+  const partner = await prisma.deliveryPartner.findUnique({ where: { id: partnerId } });
+  if (!partner) throw new NotFoundError("Delivery partner not found");
+  if (approved && partner.status !== DeliveryPartnerStatus.APPROVED) {
+    throw new AppError(400, "Only platform-approved delivery partners can be approved by a school");
+  }
+  const link = await prisma.schoolDeliveryPartner.upsert({
+    where: { schoolId_deliveryPartnerId: { schoolId, deliveryPartnerId: partnerId } },
+    create: { schoolId, deliveryPartnerId: partnerId, approved },
+    update: { approved },
+    include: { deliveryPartner: { select: deliveryPartnerSummary } },
+  });
+  await writeAuditLog({
+    action: approved ? "SCHOOL_DELIVERY_PARTNER_APPROVED" : "SCHOOL_DELIVERY_PARTNER_REVOKED",
+    resourceType: "SchoolDeliveryPartner",
+    resourceId: link.id,
+    metadata: { schoolId, deliveryPartnerId: partnerId },
+    context: ctx,
+  });
+  return link;
+}
+
+/** School assigns its packed orders to one of its approved delivery partners. */
+export async function assignSchoolDelivery(params: {
+  schoolId: string;
+  partnerId: string;
+  actorUserId: string;
+  ctx: AuditContext;
+}) {
+  await assertApproved(params.partnerId);
+  await assertSchoolApprovedPartner(params.schoolId, params.partnerId);
+  const batch = await prisma.$transaction((tx) =>
+    createDeliveryBatchForSchool(tx, {
+      schoolId: params.schoolId,
+      partnerId: params.partnerId,
+      actorUserId: params.actorUserId,
+    }),
+  );
+  await writeAuditLog({
+    action: "SCHOOL_DELIVERY_ASSIGNED",
+    resourceType: "DeliveryBatch",
+    resourceId: batch.id,
+    metadata: { schoolId: params.schoolId, deliveryPartnerId: params.partnerId, orderCount: batch.orderCount },
+    context: { ...params.ctx, actorUserId: params.actorUserId },
+  });
+  return batch;
+}
+
+/** Packed orders without a batch, grouped by school (only schools that approved this partner). */
 export async function listDriverJobs(partnerId: string) {
   await assertApproved(partnerId);
   const orders = await prisma.order.findMany({
-    where: { status: OrderStatus.READY_FOR_DISPATCH, deliveryBatchId: null },
+    where: {
+      status: OrderStatus.READY_FOR_DISPATCH,
+      deliveryBatchId: null,
+      school: { schoolDeliveryPartners: { some: { deliveryPartnerId: partnerId, approved: true } } },
+    },
     orderBy: { updatedAt: "asc" },
     take: 500,
     select: {
@@ -345,11 +505,12 @@ export async function listDriverJobs(partnerId: string) {
     if (o.vendor) entry.vendors.set(o.vendor.id, o.vendor);
     bySchool.set(o.schoolId, entry);
   }
-  return [...bySchool.values()].map((e) => ({
+  const jobs = [...bySchool.values()].map((e) => ({
     school: e.school,
     orderCount: e.orderCount,
     pickups: [...e.vendors.values()],
   }));
+  return jobs;
 }
 
 export async function acceptDriverJob(params: {
@@ -359,50 +520,15 @@ export async function acceptDriverJob(params: {
   ctx: AuditContext;
 }) {
   await assertApproved(params.partnerId);
+  await assertSchoolApprovedPartner(params.schoolId, params.partnerId);
 
-  const batch = await prisma.$transaction(async (tx) => {
-    const candidates = await tx.order.findMany({
-      where: { schoolId: params.schoolId, status: OrderStatus.READY_FOR_DISPATCH, deliveryBatchId: null },
-      select: { id: true, orderNumber: true, vendorId: true },
-    });
-    if (candidates.length === 0) throw new AppError(409, "No packed orders are waiting for this school");
-
-    const created = await tx.deliveryBatch.create({
-      data: {
-        schoolId: params.schoolId,
-        deliveryPartnerId: params.partnerId,
-        batchNumber: `DB-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`,
-        deliveryDate: new Date(),
-        status: DeliveryBatchStatus.PLANNED,
-        orderCount: 0,
-        manifest: { orders: candidates.map((c) => c.orderNumber) },
-      },
-    });
-
-    // Claim only orders still unassigned so two drivers cannot take the same parcel.
-    const claimed = await tx.order.updateMany({
-      where: { id: { in: candidates.map((c) => c.id) }, deliveryBatchId: null, status: OrderStatus.READY_FOR_DISPATCH },
-      data: { deliveryBatchId: created.id },
-    });
-    if (claimed.count === 0) throw new AppError(409, "These orders were just taken by another agent");
-
-    const claimedIds = (
-      await tx.order.findMany({ where: { deliveryBatchId: created.id }, select: { id: true } })
-    ).map((o) => o.id);
-
-    await transitionOrders({
-      orderIds: claimedIds,
-      from: [OrderStatus.READY_FOR_DISPATCH],
-      to: OrderStatus.DISPATCHED,
+  const batch = await prisma.$transaction((tx) =>
+    createDeliveryBatchForSchool(tx, {
+      schoolId: params.schoolId,
+      partnerId: params.partnerId,
       actorUserId: params.actorUserId,
-      tx,
-    });
-
-    return tx.deliveryBatch.update({
-      where: { id: created.id },
-      data: { orderCount: claimedIds.length },
-    });
-  });
+    }),
+  );
 
   await writeAuditLog({
     action: "DELIVERY_JOB_ACCEPTED",

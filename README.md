@@ -55,6 +55,7 @@ All demo accounts use password: `Demo@SchoolMart2026`
 | Student | student.brian@demo.ke | /student |
 | Vendor (Kitchen) | vendor.kitchen@demo.ke | /vendor |
 | Vendor (Stationery) | vendor.stationery@demo.ke | /vendor |
+| Driver | driver@demo.ke | /driver |
 | Finance | finance@schoolmart.demo | /admin |
 | Support | support@schoolmart.demo | /admin |
 

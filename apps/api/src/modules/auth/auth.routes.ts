@@ -61,6 +61,7 @@ export async function authRoutes(app: FastifyInstance) {
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
       user: result.user,
+      profile: result.profile,
     });
   });
 

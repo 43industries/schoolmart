@@ -34,6 +34,7 @@ export default function LinkChildPage() {
   const [schools, setSchools] = useState<School[]>([]);
   const [form, setForm] = useState({
     firstName: "",
+    middleName: "",
     lastName: "",
     schoolId: "",
     grade: "",
@@ -55,7 +56,7 @@ export default function LinkChildPage() {
     setError("");
     setSubmitting(true);
     try {
-      await parentsApi.linkChild(form);
+      await parentsApi.linkChild({ ...form, middleName: form.middleName || undefined });
       setSuccess(true);
       setTimeout(() => router.push("/parent/children"), 2000);
     } catch (err) {
@@ -99,6 +100,11 @@ export default function LinkChildPage() {
                   required
                 />
               </div>
+              <Input
+                label="Child Middle Name (optional)"
+                value={form.middleName}
+                onChange={(e) => setForm({ ...form, middleName: e.target.value })}
+              />
               <Select
                 label="School"
                 value={form.schoolId}

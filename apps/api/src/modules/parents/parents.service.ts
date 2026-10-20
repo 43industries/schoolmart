@@ -25,6 +25,7 @@ export async function linkChild(parentUserId: string, input: LinkChildInput, ctx
       relationship: input.relationship,
       status: LinkStatus.PENDING_SCHOOL_APPROVAL,
       claimedFirstName: input.firstName,
+      claimedMiddleName: input.middleName || undefined,
       claimedLastName: input.lastName,
       claimedGrade: input.grade,
       classTeacherName: input.classTeacherName,
@@ -58,6 +59,7 @@ export async function linkChild(parentUserId: string, input: LinkChildInput, ctx
     status: link.status,
     relationship: link.relationship,
     claimedFirstName: link.claimedFirstName,
+    claimedMiddleName: link.claimedMiddleName,
     claimedLastName: link.claimedLastName,
     classTeacherName: link.classTeacherName,
     student: link.student,
@@ -73,6 +75,7 @@ export async function listParentChildren(parentUserId: string) {
         select: {
           id: true,
           firstName: true,
+          middleName: true,
           lastName: true,
           preferredName: true,
           studentNumber: true,
@@ -92,12 +95,14 @@ export async function listParentChildren(parentUserId: string) {
     status: link.status,
     relationship: link.relationship,
     claimedFirstName: link.claimedFirstName,
+    claimedMiddleName: link.claimedMiddleName,
     claimedLastName: link.claimedLastName,
     classTeacherName: link.classTeacherName,
     approvedAt: link.approvedAt,
     student: {
       id: link.student.id,
       firstName: link.student.firstName,
+      middleName: link.student.middleName,
       lastName: link.student.lastName,
       preferredName: link.student.preferredName,
       studentNumber: link.student.studentNumber,
@@ -118,7 +123,7 @@ export async function listPendingLinks(schoolId: string) {
       student: { schoolId },
     },
     include: {
-      student: { select: { id: true, firstName: true, lastName: true, studentNumber: true, grade: true } },
+      student: { select: { id: true, firstName: true, middleName: true, lastName: true, studentNumber: true, grade: true } },
       parentProfile: {
         include: { user: { select: { id: true, firstName: true, lastName: true, email: true, phoneE164: true } } },
       },

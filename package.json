@@ -13,6 +13,7 @@
     "db:generate": "pnpm --filter @schoolmart/db generate",
     "db:migrate": "pnpm --filter @schoolmart/db migrate",
     "db:seed": "pnpm --filter @schoolmart/db seed",
+    "smoke:demo-logins": "node scripts/demo-login-smoke.mjs",
     "db:studio": "pnpm --filter @schoolmart/db studio"
   },
   "devDependencies": {

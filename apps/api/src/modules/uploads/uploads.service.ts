@@ -12,6 +12,48 @@ const EXT_BY_MIME: Record<string, string> = {
 };
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+export const MAX_LOGBOOK_BYTES = 10 * 1024 * 1024;
+/** Largest multipart file the API accepts (logbooks are bigger than product images). */
+export const MAX_UPLOAD_BYTES = Math.max(MAX_IMAGE_BYTES, MAX_LOGBOOK_BYTES);
+
+const LOGBOOK_MIME = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+const LOGBOOK_EXT_BY_MIME: Record<string, string> = {
+  "application/pdf": ".pdf",
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+};
+
+/** Private (non-static) storage for vehicle logbooks — never under getUploadRoot(). */
+export function getLogbooksDir() {
+  return process.env.LOGBOOK_DIR
+    ? path.resolve(process.env.LOGBOOK_DIR)
+    : path.resolve(process.cwd(), "private-uploads", "logbooks");
+}
+
+export function getLogbookPath(storedName: string) {
+  return path.join(getLogbooksDir(), path.basename(storedName));
+}
+
+export async function saveLogbook(opts: { buffer: Buffer; mimetype: string; originalFilename?: string }) {
+  if (!LOGBOOK_MIME.has(opts.mimetype)) {
+    throw new AppError(400, "Logbook must be a PDF, JPEG, PNG, or WebP file");
+  }
+  if (opts.buffer.byteLength === 0) throw new AppError(400, "Empty logbook file");
+  if (opts.buffer.byteLength > MAX_LOGBOOK_BYTES) {
+    throw new AppError(400, "Logbook must be 10MB or smaller");
+  }
+  await mkdir(getLogbooksDir(), { recursive: true });
+  const ext = LOGBOOK_EXT_BY_MIME[opts.mimetype] ?? ".pdf";
+  const storedName = `${randomUUID()}${ext}`;
+  await writeFile(path.join(getLogbooksDir(), storedName), opts.buffer);
+  return {
+    storedName,
+    fileName: opts.originalFilename ?? storedName,
+    mimetype: opts.mimetype,
+    size: opts.buffer.byteLength,
+  };
+}
 
 export function getUploadRoot() {
   return process.env.UPLOAD_DIR

@@ -20,6 +20,7 @@ interface Student {
   id: string;
   studentNumber: string;
   firstName: string;
+  middleName?: string | null;
   lastName: string;
   grade: string;
   className?: string;
@@ -75,7 +76,7 @@ export default function SchoolStudentsPage() {
               {students.map((s, i) => (
                 <tr key={s.id} className={i % 2 === 0 ? "bg-white" : "bg-brand-surface/60"}>
                   <td className="px-4 py-3 font-mono text-xs">{s.studentNumber}</td>
-                  <td className="px-4 py-3 font-medium">{s.firstName} {s.lastName}</td>
+                  <td className="px-4 py-3 font-medium">{s.firstName} {s.middleName ?? ""} {s.lastName}</td>
                   <td className="px-4 py-3">{s.grade}</td>
                   <td className="px-4 py-3 capitalize">{s.boardingStatus.toLowerCase()}</td>
                   <td className="px-4 py-3 capitalize">{s.status.toLowerCase()}</td>

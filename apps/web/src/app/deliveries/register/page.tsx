@@ -31,6 +31,9 @@ export default function DeliveryRegisterPage() {
     serviceTowns: "",
   });
   const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
+  const [primaryVehicleType, setPrimaryVehicleType] = useState<VehicleType | "">("");
+  const [plateNumber, setPlateNumber] = useState("");
+  const [logbook, setLogbook] = useState<File | null>(null);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -53,11 +56,26 @@ export default function DeliveryRegisterPage() {
         setError("Select at least one vehicle type");
         return;
       }
-      await deliveriesApi.register({
-        ...form,
-        vehicleTypes,
-        acceptTerms,
-      });
+      if (!primaryVehicleType) {
+        setError("Select your primary vehicle type");
+        return;
+      }
+      if (!plateNumber.trim()) {
+        setError("Enter the vehicle registration / plate number");
+        return;
+      }
+      if (!logbook) {
+        setError("Attach a copy of the vehicle logbook");
+        return;
+      }
+      const data = new FormData();
+      Object.entries(form).forEach(([k, v]) => data.append(k, v));
+      vehicleTypes.forEach((v) => data.append("vehicleTypes", v));
+      data.append("primaryVehicleType", primaryVehicleType);
+      data.append("vehiclePlateNumber", plateNumber);
+      data.append("acceptTerms", String(acceptTerms));
+      data.append("logbook", logbook);
+      await deliveriesApi.register(data);
       router.push("/deliveries/register/success");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Registration failed");
@@ -154,6 +172,50 @@ export default function DeliveryRegisterPage() {
                   </div>
                 </div>
 
+                <div>
+                  <label className="label" htmlFor="primary-vehicle">Primary Vehicle (means of transport)</label>
+                  <select
+                    id="primary-vehicle"
+                    className="input"
+                    value={primaryVehicleType}
+                    onChange={(e) => {
+                      const v = e.target.value as VehicleType;
+                      setPrimaryVehicleType(v);
+                      if (v) setVehicleTypes((prev) => (prev.includes(v) ? prev : [...prev, v]));
+                    }}
+                    required
+                  >
+                    <option value="">Select primary vehicle</option>
+                    {VEHICLE_TYPES.map((v) => (
+                      <option key={v} value={v}>{VEHICLE_LABELS[v]}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <Input
+                  label="Vehicle Registration / Plate Number"
+                  value={plateNumber}
+                  onChange={(e) => setPlateNumber(e.target.value.toUpperCase())}
+                  placeholder="e.g. KCX 123A"
+                  required
+                />
+
+                <div>
+                  <label className="label" htmlFor="logbook">Vehicle Logbook Copy</label>
+                  <input
+                    id="logbook"
+                    type="file"
+                    accept=".pdf,image/jpeg,image/png,image/webp"
+                    className="input"
+                    onChange={(e) => setLogbook(e.target.files?.[0] ?? null)}
+                    required
+                  />
+                  <p className="mt-1 text-xs text-brand-muted">
+                    Attach a copy of the logbook (PDF or photo, up to 10MB). Reviewed by our team before approval.
+                    {logbook ? ` Selected: ${logbook.name}` : ""}
+                  </p>
+                </div>
+
                 <div className="rounded-2xl border border-gray-100 bg-brand-surface p-4 text-sm">
                   <label className="flex items-start gap-3">
                     <input
@@ -173,7 +235,7 @@ export default function DeliveryRegisterPage() {
                 <Button
                   type="submit"
                   className="w-full"
-                  disabled={loading || !acceptTerms || vehicleTypes.length === 0}
+                  disabled={loading || !acceptTerms || vehicleTypes.length === 0 || !primaryVehicleType || !plateNumber.trim() || !logbook}
                 >
                   {loading ? "Submitting..." : "Submit delivery application"}
                 </Button>

@@ -116,10 +116,10 @@ export default function ParentDashboard() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="font-semibold text-brand-ink">
-                      {link.student.firstName} {link.student.lastName}
+                      {link.student.firstName} {link.student.middleName ?? ""} {link.student.lastName}
                       {link.claimedFirstName && (
                         <span className="ml-2 text-sm font-normal text-brand-muted">
-                          (you entered: {link.claimedFirstName} {link.claimedLastName})
+                          (you entered: {link.claimedFirstName} {link.claimedMiddleName ?? ""} {link.claimedLastName})
                         </span>
                       )}
                     </p>

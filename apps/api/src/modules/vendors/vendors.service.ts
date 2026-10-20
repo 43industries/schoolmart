@@ -103,7 +103,10 @@ export async function registerVendor(input: RegisterVendorInput, ctx: AuditConte
         slug,
         description: input.description,
         contactEmail: input.email,
-        contactPhone: input.phone,
+        contactPhone: input.businessContactPhone,
+        contactPersonName: input.businessContactPerson,
+        contactPersonPhone: input.businessContactPhone,
+        websiteUrl: input.website || undefined,
         ownerUserId: user.id,
         county: input.county,
         town: input.town,
@@ -130,7 +133,7 @@ export async function registerVendor(input: RegisterVendorInput, ctx: AuditConte
     action: "VENDOR_REGISTERED",
     resourceType: "Vendor",
     resourceId: result.vendor.id,
-    metadata: { name: result.vendor.name, categories: input.sellCategories },
+    metadata: { name: result.vendor.name, categories: input.sellCategories, website: input.website || null },
     context: { ...ctx, actorUserId: result.user.id },
   });
 

@@ -70,6 +70,7 @@ export async function registerParent(input: RegisterInput, ctx: AuditContext): P
         relationship: input.child.relationship,
         status: LinkStatus.PENDING_SCHOOL_APPROVAL,
         claimedFirstName: input.child.firstName,
+        claimedMiddleName: input.child.middleName || undefined,
         claimedLastName: input.child.lastName,
         claimedGrade: input.child.grade,
         classTeacherName: input.child.classTeacherName,
@@ -126,7 +127,10 @@ export async function resolveLoginUser(identifier: string) {
   });
 }
 
-export async function login(input: LoginInput, ctx: AuditContext): Promise<AuthTokens & { user: TokenPayload }> {
+export async function login(
+  input: LoginInput,
+  ctx: AuditContext,
+): Promise<AuthTokens & { user: TokenPayload; profile: Awaited<ReturnType<typeof getUserProfile>> }> {
   const user = await resolveLoginUser(input.identifier);
   if (!user) throw new UnauthorizedError("Invalid credentials");
 
@@ -137,17 +141,23 @@ export async function login(input: LoginInput, ctx: AuditContext): Promise<AuthT
   const valid = await verifyPassword(user.passwordHash, input.password);
   if (!valid) throw new UnauthorizedError("Invalid credentials");
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { lastLoginAt: new Date() },
-  });
-
   const payload: TokenPayload = {
     sub: user.id,
     roles: user.roles.map((r) => ({ role: r.role, scopeType: r.scopeType, scopeId: r.scopeId })),
   };
 
-  const tokens = await createSession(user.id, payload, ctx);
+  // Independent writes/reads run together so sign-in is one DB round-trip deep,
+  // and the profile rides along with the tokens (no second /users/me call).
+  const [tokens, profile] = await Promise.all([
+    (async () => {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      });
+      return createSession(user.id, payload, ctx);
+    })(),
+    getUserProfile(user.id),
+  ]);
 
   await writeAuditLog({
     action: "USER_LOGIN",
@@ -156,7 +166,7 @@ export async function login(input: LoginInput, ctx: AuditContext): Promise<AuthT
     context: { ...ctx, actorUserId: user.id },
   });
 
-  return { ...tokens, user: payload };
+  return { ...tokens, user: payload, profile };
 }
 
 async function createSession(userId: string, payload: TokenPayload, ctx: AuditContext): Promise<AuthTokens> {

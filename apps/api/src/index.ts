@@ -31,7 +31,7 @@ import { paymentRoutes } from "./modules/payments/payments.routes.js";
 import { startPaymentReconciler } from "./modules/payments/payments.reconcile.js";
 import { notificationRoutes } from "./modules/notifications/notifications.routes.js";
 import { orderRoutes } from "./modules/orders/orders.routes.js";
-import { ensureUploadDirs, getUploadRoot, MAX_IMAGE_BYTES } from "./modules/uploads/uploads.service.js";
+import { ensureUploadDirs, getUploadRoot, MAX_UPLOAD_BYTES } from "./modules/uploads/uploads.service.js";
 
 const app = Fastify({
   logger: {
@@ -57,7 +57,7 @@ await app.register(cookie, { secret: config.cookieSecret });
 await app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
 await app.register(multipart, {
   limits: {
-    fileSize: MAX_IMAGE_BYTES,
+    fileSize: MAX_UPLOAD_BYTES,
     files: 5,
   },
 });
