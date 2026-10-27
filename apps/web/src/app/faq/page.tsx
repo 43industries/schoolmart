@@ -7,7 +7,7 @@ const faqs = [
   },
   {
     q: "How does payment work?",
-    a: "Parents can pay with the child wallet or pay the order directly via M-PESA, card, or bank. Wallet and direct payments are processed by SchoolMart — not sent straight to a vendor’s till. Vendors are settled according to platform terms after orders are fulfilled.",
+    a: "Parents can pay with the child wallet or pay an order directly via M-PESA (STK push). Wallet and M-PESA payments are processed by SchoolMart — not sent straight to a vendor’s till. Card and bank rails are planned; vendors are settled under platform terms after orders are fulfilled.",
   },
   {
     q: "What is the Student Wallet?",
@@ -19,7 +19,7 @@ const faqs = [
   },
   {
     q: "How does my child collect their order?",
-    a: "After last-mile delivery to the school collection point, your child verifies identity using PIN, QR code, or student ID and collects securely. You can track confirmation as a parent.",
+    a: "After last-mile delivery to the school collection point, your child verifies with their collection PIN or QR code at the desk (or confirms in the student app). You can track confirmation as a parent.",
   },
   {
     q: "How do vendors join?",

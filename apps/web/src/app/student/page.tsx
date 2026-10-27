@@ -19,6 +19,7 @@ import { PortalLayout } from "@/components/layout/portal-layout";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { CollectionQrDisplay } from "@/components/collection-qr";
 import { Package, Wallet, Sparkles, ShoppingBag } from "lucide-react";
 
 const navItems = [
@@ -59,6 +60,7 @@ export default function StudentPortalPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [requests, setRequests] = useState<StudentRequest[]>([]);
   const [pinByOrder, setPinByOrder] = useState<Record<string, string>>({});
+  const [qrToken, setQrToken] = useState<string>("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -84,6 +86,13 @@ export default function StudentPortalPage() {
 
     const shop = await catalogApi.search({ schoolId: me.school.id });
     setProducts(shop.products);
+
+    try {
+      const qr = await studentsApi.collectionQr();
+      setQrToken(qr.qrToken);
+    } catch {
+      setQrToken("");
+    }
   }, []);
 
   useEffect(() => {
@@ -349,9 +358,18 @@ export default function StudentPortalPage() {
         <CardHeader>
           <CardTitle>Collections</CardTitle>
           <CardDescription>
-            Track deliveries to campus and confirm pickup with your collection PIN.
+            Track deliveries to campus. Confirm with your PIN, or show your QR at the school desk.
           </CardDescription>
         </CardHeader>
+        {qrToken && collections.some((c) => c.canCollect) && (
+          <div className="mb-4 rounded-xl border border-brand-teal/20 bg-brand-teal/5 p-4">
+            <p className="mb-2 text-sm font-medium text-brand-ink">Your collection QR</p>
+            <p className="mb-3 text-xs text-brand-muted">
+              Show this at the desk for parcels ready to collect. Keep it private — it works like your PIN.
+            </p>
+            <CollectionQrDisplay token={qrToken} />
+          </div>
+        )}
         {collections.length === 0 ? (
           <p className="text-sm text-brand-muted">No deliveries in progress yet.</p>
         ) : (

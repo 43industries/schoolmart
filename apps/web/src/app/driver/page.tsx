@@ -200,8 +200,30 @@ export default function DriverPage() {
                               disabled={busy || (recipients[b.id] ?? "").trim().length < 2}
                               onClick={() =>
                                 run(async () => {
-                                  await ordersApi.driverDeliver(b.id, { recipientName: (recipients[b.id] ?? "").trim() });
-                                  return `${b.batchNumber} delivered to ${b.school.name}`;
+                                  let latitude: number | undefined;
+                                  let longitude: number | undefined;
+                                  if (typeof navigator !== "undefined" && navigator.geolocation) {
+                                    try {
+                                      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+                                        navigator.geolocation.getCurrentPosition(resolve, reject, {
+                                          timeout: 8000,
+                                          maximumAge: 60_000,
+                                        }),
+                                      );
+                                      latitude = pos.coords.latitude;
+                                      longitude = pos.coords.longitude;
+                                    } catch {
+                                      /* GPS optional */
+                                    }
+                                  }
+                                  await ordersApi.driverDeliver(b.id, {
+                                    recipientName: (recipients[b.id] ?? "").trim(),
+                                    latitude,
+                                    longitude,
+                                  });
+                                  return `${b.batchNumber} delivered to ${b.school.name}${
+                                    latitude != null ? " · GPS captured" : ""
+                                  }`;
                                 })
                               }
                             >

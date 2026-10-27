@@ -226,8 +226,11 @@ export default function DeliveryRegisterPage() {
                       required
                     />
                     <span>
-                      I accept SchoolMart’s last-mile delivery partner terms, including safe campus drop-off and
-                      accurate service area information.
+                      I accept SchoolMart’s{" "}
+                      <a href="/deliveries/terms" className="font-medium text-brand-teal hover:underline" target="_blank" rel="noreferrer">
+                        last-mile delivery partner terms
+                      </a>
+                      , including safe campus drop-off and accurate service area information.
                     </span>
                   </label>
                 </div>

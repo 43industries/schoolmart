@@ -34,10 +34,29 @@ export type ProviderQueryResult = {
   raw?: unknown;
 };
 
+export type ProviderRefundInput = {
+  /** M-PESA receipt / provider transaction id to reverse */
+  receipt: string;
+  amountMinor: number;
+  phoneE164?: string | null;
+  reason: string;
+  /** Original checkout providerRef (CheckoutRequestID) for audit correlation */
+  providerRef?: string | null;
+};
+
+export type ProviderRefundResult = {
+  status: "SUCCEEDED" | "FAILED" | "PENDING";
+  providerRefundRef?: string;
+  message?: string;
+  raw?: unknown;
+};
+
 export interface PaymentProvider {
   name: string;
   initiate(input: ProviderInitiateInput): Promise<ProviderInitiateResult>;
   parseWebhook?(body: unknown): Promise<ProviderWebhookResult>;
   /** Ask the provider for the current status of an intent (reconciliation). */
   queryStatus?(providerRef: string): Promise<ProviderQueryResult>;
+  /** Reverse / refund a successful rail payment back to the payer (when supported). */
+  refund?(input: ProviderRefundInput): Promise<ProviderRefundResult>;
 }

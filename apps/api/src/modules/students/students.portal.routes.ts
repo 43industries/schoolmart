@@ -15,6 +15,7 @@ import {
   getStudentWallet,
   listStudentCollections,
   confirmStudentCollection,
+  getStudentCollectionQr,
 } from "./students.portal.service.js";
 import {
   createStudentProductRequest,
@@ -52,6 +53,10 @@ export async function studentPortalRoutes(app: FastifyInstance) {
   app.get("/me/collections", { preHandler: [authenticate, requireStudent()] }, async (req, reply) => {
     const collections = await listStudentCollections(req.user!.sub);
     return reply.send({ collections });
+  });
+
+  app.get("/me/collection-qr", { preHandler: [authenticate, requireStudent()] }, async (req, reply) => {
+    return reply.send(await getStudentCollectionQr(req.user!.sub));
   });
 
   app.post("/me/collections/confirm", { preHandler: [authenticate, requireStudent()] }, async (req, reply) => {

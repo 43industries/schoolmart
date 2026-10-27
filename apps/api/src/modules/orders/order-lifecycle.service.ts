@@ -2,14 +2,17 @@ import {
   prisma,
   LedgerAccountCode,
   OrderStatus,
+  PaymentMethod,
   PaymentStatus,
   type Prisma,
 } from "@schoolmart/db";
 import { formatKES } from "@schoolmart/shared";
 import { AppError, NotFoundError, ValidationError } from "../../lib/errors.js";
 import { writeAuditLog, type AuditContext } from "../audit/audit.service.js";
-import { notifyUser } from "../notifications/notifications.service.js";
+import { fanOutNotification, notifyUser } from "../notifications/notifications.service.js";
 import { creditStudentWallet } from "../wallets/wallet-credit.service.js";
+import { cancelPendingCheckoutOrders } from "../cart/order-payment.service.js";
+import { getProviderByName } from "../payments/providers/index.js";
 
 const STATUS_COPY: Partial<Record<OrderStatus, string>> = {
   VENDOR_ACCEPTED: "was accepted by the vendor",
@@ -98,7 +101,7 @@ export async function transitionOrders(params: {
           {
             userId: order.student.userId,
             title: "Package ready to collect",
-            body: `Order ${order.orderNumber} is at the school collection point. Bring your collection PIN.`,
+            body: `Order ${order.orderNumber} is at the school collection point. Bring your collection PIN or QR.`,
             metadata: { orderId: order.id },
           },
           tx,
@@ -106,9 +109,31 @@ export async function transitionOrders(params: {
       }
       moved.push(order);
     }
-    return moved.map((o) => o.id);
+    return moved;
   };
-  return params.tx ? run(params.tx) : prisma.$transaction(run);
+
+  const moved = params.tx ? await run(params.tx) : await prisma.$transaction(run);
+  // Fan-out SMS/email after commit (skipped when nested in caller's transaction).
+  if (!params.tx) {
+    for (const order of moved) {
+      const copy = STATUS_COPY[params.to];
+      if (copy) {
+        void fanOutNotification(
+          order.parentUserId,
+          `Order ${order.orderNumber}`,
+          `Order ${order.orderNumber} ${copy}.${params.note ? ` ${params.note}` : ""}`,
+        );
+      }
+      if (params.to === OrderStatus.READY_FOR_COLLECTION) {
+        void fanOutNotification(
+          order.student.userId,
+          "Package ready to collect",
+          `Order ${order.orderNumber} is at the school collection point. Bring your collection PIN or QR.`,
+        );
+      }
+    }
+  }
+  return moved.map((o) => o.id);
 }
 
 async function refundedSoFar(db: Prisma.TransactionClient | typeof prisma, orderId: string) {
@@ -123,10 +148,15 @@ export async function getRefundedMinor(orderId: string) {
   return refundedSoFar(prisma, orderId);
 }
 
+export type RefundDestination = "WALLET" | "ORIGINAL_RAIL";
+
 /**
- * Refund a paid order to the child's wallet (full or partial). Reverses the vendor payable
- * by the same amount and, on a full refund, restores stock and closes the order.
- * Direct M-PESA/card payments are refunded as wallet credit until provider reversals are wired.
+ * Refund a paid order (full or partial). Reverses vendor payable by the same amount and,
+ * on a full refund, restores stock and closes the order.
+ *
+ * Destination:
+ * - WALLET (default): credit student wallet
+ * - ORIGINAL_RAIL: attempt provider reversal (M-PESA receipt); if unavailable/fails, fall back to wallet
  */
 export async function refundOrderToWallet(params: {
   orderId: string;
@@ -135,10 +165,17 @@ export async function refundOrderToWallet(params: {
   actorUserId: string;
   ctx: AuditContext;
   allowedStatuses?: OrderStatus[];
+  destination?: RefundDestination;
 }) {
   const order = await prisma.order.findUnique({
     where: { id: params.orderId },
-    include: { items: true },
+    include: {
+      items: true,
+      payments: {
+        where: { status: { in: [PaymentStatus.SUCCEEDED, PaymentStatus.REFUNDED] } },
+        orderBy: { createdAt: "desc" },
+      },
+    },
   });
   if (!order) throw new NotFoundError("Order not found");
 
@@ -147,29 +184,70 @@ export async function refundOrderToWallet(params: {
     throw new AppError(400, `Order cannot be refunded from status ${order.status}`);
   }
 
-  const result = await prisma.$transaction(async (tx) => {
-    const already = await refundedSoFar(tx, order.id);
-    const remaining = order.totalMinor - already;
-    if (remaining <= 0) throw new AppError(400, "Order is already fully refunded");
+  const already = await refundedSoFar(prisma, order.id);
+  const remaining = order.totalMinor - already;
+  if (remaining <= 0) throw new AppError(400, "Order is already fully refunded");
 
-    const amount = params.amountMinor ?? remaining;
-    if (!Number.isInteger(amount) || amount <= 0) throw new ValidationError("Refund amount must be positive");
-    if (amount > remaining) {
-      throw new ValidationError(`Refund exceeds remaining refundable amount (${formatKES(remaining)})`);
-    }
-    const isFull = amount === remaining;
-    const refundIndex = already > 0 ? `-${already}` : "";
+  const amount = params.amountMinor ?? remaining;
+  if (!Number.isInteger(amount) || amount <= 0) throw new ValidationError("Refund amount must be positive");
+  if (amount > remaining) {
+    throw new ValidationError(`Refund exceeds remaining refundable amount (${formatKES(remaining)})`);
+  }
 
-    const credited = await creditStudentWallet(
-      {
-        studentId: order.studentId,
+  const succeededPay = order.payments.find((p) => p.status === PaymentStatus.SUCCEEDED) ?? order.payments[0];
+  let destination: "WALLET" | "MPESA_REVERSAL" | "MOCK_REVERSAL" = "WALLET";
+  let railMessage: string | undefined;
+  let providerRefundRef: string | undefined;
+
+  const wantRail = params.destination === "ORIGINAL_RAIL";
+  if (wantRail && succeededPay && succeededPay.method !== PaymentMethod.WALLET) {
+    const meta =
+      succeededPay.metadata && typeof succeededPay.metadata === "object" && !Array.isArray(succeededPay.metadata)
+        ? (succeededPay.metadata as Record<string, unknown>)
+        : {};
+    const receipt = typeof meta.receipt === "string" ? meta.receipt : null;
+    const provider = getProviderByName(succeededPay.provider);
+    if (!receipt) {
+      railMessage = "No provider receipt on file — refund credited to wallet instead.";
+    } else if (!provider?.refund) {
+      railMessage = `Provider ${succeededPay.provider} cannot reverse payments — refund credited to wallet.`;
+    } else {
+      const rail = await provider.refund({
+        receipt,
         amountMinor: amount,
-        type: "CREDIT_REFUND",
-        description: `Refund · ${order.orderNumber}${isFull ? "" : " (partial)"} · ${params.reason}`,
-        referenceId: `refund-${order.id}${refundIndex}`,
-      },
-      tx,
-    );
+        phoneE164: succeededPay.phoneE164,
+        reason: params.reason,
+        providerRef: succeededPay.providerRef,
+      });
+      if (rail.status === "FAILED") {
+        railMessage = `${rail.message ?? "Rail refund failed"} — credited to wallet instead.`;
+      } else {
+        destination = succeededPay.provider === "mock" ? "MOCK_REVERSAL" : "MPESA_REVERSAL";
+        providerRefundRef = rail.providerRefundRef;
+        railMessage = rail.message;
+      }
+    }
+  }
+
+  const creditWallet = destination === "WALLET";
+  const isFull = amount === remaining;
+  const refundIndex = already > 0 ? `-${already}` : "";
+
+  const result = await prisma.$transaction(async (tx) => {
+    let walletBalanceMinor: number | undefined;
+    if (creditWallet) {
+      const credited = await creditStudentWallet(
+        {
+          studentId: order.studentId,
+          amountMinor: amount,
+          type: "CREDIT_REFUND",
+          description: `Refund · ${order.orderNumber}${isFull ? "" : " (partial)"} · ${params.reason}`,
+          referenceId: `refund-${order.id}${refundIndex}`,
+        },
+        tx,
+      );
+      walletBalanceMinor = credited.balanceMinor;
+    }
 
     await tx.ledgerEntry.create({
       data: {
@@ -177,7 +255,9 @@ export async function refundOrderToWallet(params: {
         creditMinor: amount,
         referenceType: "Order",
         referenceId: order.id,
-        description: `Refund to wallet · ${order.orderNumber} · ${params.reason}`,
+        description: creditWallet
+          ? `Refund to wallet · ${order.orderNumber} · ${params.reason}`
+          : `Refund via ${destination} · ${order.orderNumber} · ${params.reason}`,
       },
     });
     if (order.vendorId) {
@@ -191,6 +271,29 @@ export async function refundOrderToWallet(params: {
         },
       });
     }
+
+    if (succeededPay && !creditWallet) {
+      const prevMeta =
+        succeededPay.metadata && typeof succeededPay.metadata === "object" && !Array.isArray(succeededPay.metadata)
+          ? { ...(succeededPay.metadata as Record<string, unknown>) }
+          : {};
+      await tx.payment.update({
+        where: { id: succeededPay.id },
+        data: {
+          metadata: {
+            ...prevMeta,
+            refundDestination: destination,
+            providerRefundRef: providerRefundRef ?? null,
+            refundReason: params.reason,
+            refundAmountMinor: amount,
+          },
+        },
+      });
+    }
+
+    const destNote = creditWallet
+      ? `${formatKES(amount)} refunded to wallet`
+      : `${formatKES(amount)} refund via ${destination === "MOCK_REVERSAL" ? "mock rail" : "M-PESA reversal"}`;
 
     if (isFull) {
       const stockStillHeld = order.status !== OrderStatus.COLLECTED && order.status !== OrderStatus.COMPLETED;
@@ -211,7 +314,7 @@ export async function refundOrderToWallet(params: {
         from: [order.status],
         to: OrderStatus.REFUNDED,
         actorUserId: params.actorUserId,
-        note: `${formatKES(amount)} refunded to wallet: ${params.reason}`,
+        note: `${destNote}: ${params.reason}`,
         tx,
       });
     } else {
@@ -221,28 +324,43 @@ export async function refundOrderToWallet(params: {
           fromStatus: order.status,
           toStatus: order.status,
           actorUserId: params.actorUserId,
-          note: `Partial refund ${formatKES(amount)} to wallet: ${params.reason}`,
+          note: `Partial ${destNote}: ${params.reason}`,
         },
       });
       await notifyUser(
         {
           userId: order.parentUserId,
           title: `Partial refund · ${order.orderNumber}`,
-          body: `${formatKES(amount)} was refunded to your child's wallet. ${params.reason}`,
-          metadata: { orderId: order.id },
+          body: creditWallet
+            ? `${formatKES(amount)} was refunded to your child's wallet. ${params.reason}`
+            : `${formatKES(amount)} is being returned to your M-PESA. ${params.reason}`,
+          metadata: { orderId: order.id, destination },
         },
         tx,
       );
     }
 
-    return { amountMinor: amount, full: isFull, walletBalanceMinor: credited.balanceMinor };
+    return {
+      amountMinor: amount,
+      full: isFull,
+      walletBalanceMinor,
+      destination: creditWallet ? ("WALLET" as const) : destination,
+      railMessage,
+      providerRefundRef,
+    };
   });
 
   await writeAuditLog({
     action: result.full ? "ORDER_REFUNDED" : "ORDER_PARTIALLY_REFUNDED",
     resourceType: "Order",
     resourceId: order.id,
-    metadata: { amountMinor: result.amountMinor, reason: params.reason },
+    metadata: {
+      amountMinor: result.amountMinor,
+      reason: params.reason,
+      destination: result.destination,
+      providerRefundRef: result.providerRefundRef,
+      railMessage: result.railMessage,
+    },
     context: { ...params.ctx, actorUserId: params.actorUserId },
   });
 
@@ -255,24 +373,36 @@ export async function cancelOrderByParent(parentUserId: string, orderId: string,
   if (!order) throw new NotFoundError("Order not found");
 
   if (order.status === OrderStatus.PENDING_PAYMENT || order.status === OrderStatus.PAYMENT_PROCESSING) {
-    await prisma.$transaction(async (tx) => {
-      await tx.payment.updateMany({
-        where: { orderId, status: { in: [PaymentStatus.PENDING, PaymentStatus.PROCESSING] } },
-        data: { status: PaymentStatus.CANCELLED },
-      });
-      await transitionOrders({
-        orderIds: [orderId],
-        from: [order.status],
-        to: OrderStatus.CANCELLED,
-        actorUserId: parentUserId,
-        note: "Cancelled by parent before payment",
-        tx,
-      });
+    const siblingIds = order.checkoutGroupId
+      ? (
+          await prisma.order.findMany({
+            where: {
+              checkoutGroupId: order.checkoutGroupId,
+              parentUserId,
+              status: { in: [OrderStatus.PENDING_PAYMENT, OrderStatus.PAYMENT_PROCESSING] },
+            },
+            select: { id: true },
+          })
+        ).map((o) => o.id)
+      : [orderId];
+
+    await cancelPendingCheckoutOrders({
+      orderIds: siblingIds,
+      actorUserId: parentUserId,
+      note: "Cancelled by parent before payment",
+    });
+    await prisma.payment.updateMany({
+      where: {
+        orderId: { in: siblingIds },
+        status: { in: [PaymentStatus.PENDING, PaymentStatus.PROCESSING] },
+      },
+      data: { status: PaymentStatus.CANCELLED },
     });
     await writeAuditLog({
       action: "ORDER_CANCELLED_BY_PARENT",
       resourceType: "Order",
       resourceId: orderId,
+      metadata: { orderIds: siblingIds },
       context: { ...ctx, actorUserId: parentUserId },
     });
     return { status: OrderStatus.CANCELLED, refundedMinor: 0 };

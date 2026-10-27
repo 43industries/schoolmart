@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { schoolDeskHandoverSchema } from "@schoolmart/shared";
 import type { OrderStatus } from "@schoolmart/db";
 import {
   authenticate,
@@ -42,10 +43,12 @@ const reasonSchema = z.object({ reason: z.string().min(3).max(300) });
 const vendorStatusSchema = z.object({
   status: z.enum(VENDOR_SETTABLE_STATUSES as [OrderStatus, ...OrderStatus[]]),
 });
-const handoverSchema = z.object({ collectionPin: z.string().min(4).max(6) });
 const deliverSchema = z.object({
   recipientName: z.string().min(2).max(120),
   notes: z.string().max(500).optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  photoUrl: z.string().url().max(2000).optional(),
 });
 
 function parse<T>(schema: z.ZodType<T>, body: unknown): T {
@@ -185,12 +188,13 @@ export async function orderRoutes(app: FastifyInstance) {
     },
     async (req, reply) => {
       const { id, orderId } = req.params as { id: string; orderId: string };
-      const { collectionPin } = parse(handoverSchema, req.body);
+      const body = parse(schoolDeskHandoverSchema, req.body);
       return reply.send(
         await handoverAtDesk({
           schoolId: id,
           orderId,
-          collectionPin,
+          collectionPin: body.collectionPin,
+          qrToken: body.qrToken,
           actorUserId: req.user!.sub,
           ctx: auditContextFromRequest(req, req.user!.sub),
         }),
@@ -243,6 +247,9 @@ export async function orderRoutes(app: FastifyInstance) {
         batchId: id,
         recipientName: body.recipientName,
         notes: body.notes,
+        latitude: body.latitude,
+        longitude: body.longitude,
+        photoUrl: body.photoUrl,
         actorUserId: req.user!.sub,
         ctx: auditContextFromRequest(req, req.user!.sub),
       }),

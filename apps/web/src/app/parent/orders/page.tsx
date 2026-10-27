@@ -122,7 +122,17 @@ export default function ParentOrdersPage() {
 
         {o.status === "READY_FOR_COLLECTION" && (
           <p className="mt-3 rounded-xl bg-brand-pink/10 px-3 py-2 text-sm text-brand-ink">
-            Ready at the school desk. {o.student.firstName} collects using their student PIN.
+            Ready at the school desk. {o.student.firstName} collects with their PIN or collection QR.
+          </p>
+        )}
+        {o.status === "CANCELLED" && (
+          <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {o.statusHistory.find((h) => h.toStatus === "CANCELLED")?.note?.includes("wallet")
+              ? "Payment was received but this order could not be completed. Funds were credited to the student wallet."
+              : o.statusHistory.find((h) => h.toStatus === "CANCELLED")?.note?.toLowerCase().includes("timed") ||
+                  o.statusHistory.find((h) => h.toStatus === "CANCELLED")?.note?.toLowerCase().includes("payment")
+                ? "Payment did not complete (cancelled, declined, or timed out). Stock was released — you can order again."
+                : "This order was cancelled."}
           </p>
         )}
         {o.status === "DELIVERY_FAILED" && (

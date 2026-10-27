@@ -23,5 +23,24 @@ export const config = {
     /** Shared secret in the callback path; required in production. */
     webhookToken: process.env.MPESA_WEBHOOK_TOKEN ?? "",
     env: (process.env.MPESA_ENV ?? "sandbox") as "sandbox" | "production",
+    /** Daraja Transaction Reversal initiator (optional; without these, refunds fall back to wallet). */
+    initiatorName: process.env.MPESA_INITIATOR_NAME ?? "",
+    securityCredential: process.env.MPESA_SECURITY_CREDENTIAL ?? "",
+    reversalResultUrl: process.env.MPESA_REVERSAL_RESULT_URL ?? "",
+    reversalTimeoutUrl: process.env.MPESA_REVERSAL_TIMEOUT_URL ?? "",
+  },
+  notifications: {
+    /** When true, also attempt SMS/email fan-out (still always writes IN_APP). */
+    externalEnabled: (process.env.NOTIFICATIONS_EXTERNAL ?? "false") === "true",
+    smsProvider: (process.env.SMS_PROVIDER ?? "log") as "log" | "africastalking",
+    atApiKey: process.env.AT_API_KEY ?? "",
+    atUsername: process.env.AT_USERNAME ?? "",
+    atSenderId: process.env.AT_SENDER_ID ?? "SchoolMart",
+    emailProvider: (process.env.EMAIL_PROVIDER ?? "log") as "log" | "smtp",
+    smtpHost: process.env.SMTP_HOST ?? "",
+    smtpPort: parseInt(process.env.SMTP_PORT ?? "587", 10),
+    smtpUser: process.env.SMTP_USER ?? "",
+    smtpPass: process.env.SMTP_PASS ?? "",
+    emailFrom: process.env.EMAIL_FROM ?? "SchoolMart <noreply@schoolmart.co.ke>",
   },
 } as const;

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { settleVendorPayoutSchema } from "@schoolmart/shared";
-import { prisma, OrderStatus, DeliveryPartnerStatus } from "@schoolmart/db";
+import { prisma, OrderStatus, DeliveryPartnerStatus, UserStatus } from "@schoolmart/db";
 import { authenticate, requireSuperAdmin, requireSuperAdminOrFinance } from "../../middleware/auth.js";
 import { auditContextFromRequest, writeAuditLog } from "../audit/audit.service.js";
 import { createReadStream } from "node:fs";
@@ -18,6 +18,7 @@ import { getRefundedMinor, refundOrderToWallet } from "../orders/order-lifecycle
 const refundSchema = z.object({
   amountMinor: z.number().int().positive().optional(),
   reason: z.string().min(3).max(300),
+  destination: z.enum(["WALLET", "ORIGINAL_RAIL"]).default("WALLET"),
 });
 
 const partnerStatusSchema = z.object({
@@ -116,10 +117,49 @@ export async function adminRoutes(app: FastifyInstance) {
       orderId: id,
       amountMinor: parsed.data.amountMinor,
       reason: parsed.data.reason,
+      destination: parsed.data.destination,
       actorUserId: req.user!.sub,
       ctx: auditContextFromRequest(req, req.user!.sub),
     });
     return reply.send({ ...result, refundedTotalMinor: await getRefundedMinor(id) });
+  });
+
+  app.get("/stats", { preHandler: [authenticate, requireSuperAdminOrFinance()] }, async (_req, reply) => {
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [
+      schoolCount,
+      userCount,
+      auditCount,
+      orderCount,
+      paidLast24h,
+      pendingPayments,
+      failedPayments,
+      needsReview,
+      readyForCollection,
+    ] = await Promise.all([
+      prisma.school.count(),
+      prisma.user.count({ where: { status: UserStatus.ACTIVE } }),
+      prisma.auditLog.count(),
+      prisma.order.count({ where: { status: { not: OrderStatus.DRAFT } } }),
+      prisma.order.count({ where: { status: OrderStatus.PAID, updatedAt: { gte: since24h } } }),
+      prisma.payment.count({ where: { status: { in: ["PENDING", "PROCESSING"] } } }),
+      prisma.payment.count({ where: { status: "FAILED", createdAt: { gte: since24h } } }),
+      prisma.payment.count({
+        where: { metadata: { path: ["needsReview"], equals: true } },
+      }),
+      prisma.order.count({ where: { status: OrderStatus.READY_FOR_COLLECTION } }),
+    ]);
+    return reply.send({
+      schools: schoolCount,
+      activeUsers: userCount,
+      auditEvents: auditCount,
+      orders: orderCount,
+      paidLast24h,
+      pendingPayments,
+      failedPayments24h: failedPayments,
+      paymentsNeedingReview: needsReview,
+      readyForCollection,
+    });
   });
 
   app.get("/delivery-partners", { preHandler: [authenticate, requireSuperAdmin()] }, async (req, reply) => {

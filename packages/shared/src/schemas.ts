@@ -331,10 +331,48 @@ export const activateStudentSchema = z
     path: ["email"],
   });
 
-export const confirmCollectionSchema = z.object({
-  orderId: z.string().uuid(),
+export const confirmCollectionSchema = z
+  .object({
+    orderId: z.string().uuid(),
+    collectionPin: z.string().min(4).max(6).optional(),
+    qrToken: z.string().min(10).max(500).optional(),
+  })
+  .refine((d) => Boolean(d.collectionPin || d.qrToken), {
+    message: "Provide a collection PIN or QR token",
+    path: ["collectionPin"],
+  });
+
+export const schoolSettingsUpdateSchema = z.object({
+  deliveryNotes: z.string().max(2000).nullable().optional(),
+  collectionPinRequired: z.boolean().optional(),
+});
+
+export const deliveryWindowSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().min(1).max(100),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, "Use HH:MM"),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, "Use HH:MM"),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1).max(7).default([1, 2, 3, 4, 5]),
+  active: z.boolean().default(true),
+});
+
+export const putDeliveryWindowsSchema = z.object({
+  windows: z.array(deliveryWindowSchema).max(14),
+});
+
+export const resetStudentPinSchema = z.object({
   collectionPin: z.string().min(4).max(6),
 });
+
+export const schoolDeskHandoverSchema = z
+  .object({
+    collectionPin: z.string().min(4).max(6).optional(),
+    qrToken: z.string().min(10).max(500).optional(),
+  })
+  .refine((d) => Boolean(d.collectionPin || d.qrToken), {
+    message: "Provide a collection PIN or QR token",
+    path: ["collectionPin"],
+  });
 
 export const createActivitySchema = z.object({
   title: z.string().min(2).max(200),
@@ -429,6 +467,10 @@ export type StudentCheckoutInput = z.infer<typeof studentCheckoutSchema>;
 export type UpsertWalletRuleInput = z.infer<typeof upsertWalletRuleSchema>;
 export type ActivateStudentInput = z.infer<typeof activateStudentSchema>;
 export type ConfirmCollectionInput = z.infer<typeof confirmCollectionSchema>;
+export type SchoolSettingsUpdateInput = z.infer<typeof schoolSettingsUpdateSchema>;
+export type PutDeliveryWindowsInput = z.infer<typeof putDeliveryWindowsSchema>;
+export type ResetStudentPinInput = z.infer<typeof resetStudentPinSchema>;
+export type SchoolDeskHandoverInput = z.infer<typeof schoolDeskHandoverSchema>;
 export type CreateActivityInput = z.infer<typeof createActivitySchema>;
 export type UpdateActivityInput = z.infer<typeof updateActivitySchema>;
 export type RegisterActivityInput = z.infer<typeof registerActivitySchema>;

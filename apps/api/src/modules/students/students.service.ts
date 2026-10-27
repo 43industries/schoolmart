@@ -1,9 +1,33 @@
 import { prisma } from "@schoolmart/db";
-import type { CreateStudentInput } from "@schoolmart/shared";
+import type { CreateStudentInput, ResetStudentPinInput } from "@schoolmart/shared";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { hashPin } from "../../lib/crypto.js";
 import { writeAuditLog, type AuditContext } from "../audit/audit.service.js";
 import { randomBytes } from "crypto";
+
+export function buildCollectionQrToken(studentId: string, qrSecret: string) {
+  return `schoolmart:collect:${studentId}:${qrSecret}`;
+}
+
+export function parseCollectionQrToken(token: string): { studentId: string; secret: string } | null {
+  const trimmed = token.trim();
+  const prefix = "schoolmart:collect:";
+  if (!trimmed.startsWith(prefix)) return null;
+  const rest = trimmed.slice(prefix.length);
+  const sep = rest.indexOf(":");
+  if (sep <= 0) return null;
+  const studentId = rest.slice(0, sep);
+  const secret = rest.slice(sep + 1);
+  if (!studentId || !secret) return null;
+  return { studentId, secret };
+}
+
+export function secretsMatch(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
 
 export async function listSchoolStudents(schoolId: string) {
   return prisma.student.findMany({
@@ -88,4 +112,33 @@ export async function getStudentByNumber(schoolId: string, studentNumber: string
   });
   if (!student) throw new NotFoundError("Student not found");
   return student;
+}
+
+/** School admin resets collection PIN and rotates QR secret. */
+export async function resetStudentCollectionCredentials(
+  schoolId: string,
+  studentId: string,
+  input: ResetStudentPinInput,
+  ctx: AuditContext,
+) {
+  const student = await prisma.student.findFirst({ where: { id: studentId, schoolId } });
+  if (!student) throw new NotFoundError("Student not found");
+
+  const collectionPinHash = await hashPin(input.collectionPin);
+  const qrSecret = randomBytes(16).toString("hex");
+
+  await prisma.student.update({
+    where: { id: studentId },
+    data: { collectionPinHash, qrSecret },
+  });
+
+  await writeAuditLog({
+    action: "STUDENT_COLLECTION_CREDENTIALS_RESET",
+    resourceType: "Student",
+    resourceId: studentId,
+    metadata: { schoolId, rotatedQr: true },
+    context: ctx,
+  });
+
+  return { id: studentId, ok: true as const };
 }

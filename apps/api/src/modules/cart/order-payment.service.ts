@@ -4,11 +4,19 @@ import {
   PaymentMethod,
   PaymentPurpose,
   PaymentStatus,
+  type Prisma,
 } from "@schoolmart/db";
 import { AppError, NotFoundError } from "../../lib/errors.js";
 import { ensureWalletForStudent } from "../wallets/wallets.service.js";
 import { postVendorPayableForOrder } from "../payments/vendor-payable.service.js";
 import { notifyUser } from "../notifications/notifications.service.js";
+import {
+  consumeInventoryReservation,
+  decrementAvailableStock,
+  loadOrderInventoryLines,
+  releaseInventoryReservation,
+  reserveInventoryForLines,
+} from "./inventory-reservation.service.js";
 import { randomUUID } from "node:crypto";
 
 export type CartLine = {
@@ -18,6 +26,20 @@ export type CartLine = {
   priceMinor: number;
   vendorId: string;
   categorySlug: string | null;
+};
+
+export type VendorGroup = {
+  vendorId: string;
+  lines: CartLine[];
+  subtotalMinor: number;
+};
+
+export type OrderSummary = {
+  id: string;
+  orderNumber: string;
+  totalMinor: number;
+  status: OrderStatus;
+  vendorId: string | null;
 };
 
 export function mapCategory(slug: string | null): string {
@@ -49,6 +71,42 @@ export function dominantCategory(lines: CartLine[]): string {
   return best;
 }
 
+/** Stable vendor grouping for multi-vendor checkout. */
+export function groupLinesByVendor(lines: CartLine[]): VendorGroup[] {
+  const map = new Map<string, CartLine[]>();
+  for (const line of lines) {
+    const list = map.get(line.vendorId) ?? [];
+    list.push(line);
+    map.set(line.vendorId, list);
+  }
+  return [...map.entries()].map(([vendorId, vendorLines]) => ({
+    vendorId,
+    lines: vendorLines,
+    subtotalMinor: vendorLines.reduce((s, l) => s + l.priceMinor * l.quantity, 0),
+  }));
+}
+
+function summarizeOrder(o: {
+  id: string;
+  orderNumber: string;
+  totalMinor: number;
+  status: OrderStatus;
+  vendorId: string | null;
+}): OrderSummary {
+  return {
+    id: o.id,
+    orderNumber: o.orderNumber,
+    totalMinor: o.totalMinor,
+    status: o.status,
+    vendorId: o.vendorId,
+  };
+}
+
+function nextOrderNumber() {
+  return `SM-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`;
+}
+
+/** Single-vendor wallet checkout (student buy-now and legacy callers). */
 export async function createPaidOrderFromLines(opts: {
   parentUserId: string;
   studentId: string;
@@ -59,107 +117,173 @@ export async function createPaidOrderFromLines(opts: {
   paymentRef: string;
   actorUserId?: string;
 }) {
-  const vendorId = opts.lines[0]?.vendorId ?? null;
-  const orderNumber = `SM-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`;
+  const groups = groupLinesByVendor(opts.lines);
+  const result = await createPaidOrdersFromVendorGroups({
+    parentUserId: opts.parentUserId,
+    studentId: opts.studentId,
+    schoolId: opts.schoolId,
+    groups,
+    notes: opts.notes,
+    paymentRef: opts.paymentRef,
+    actorUserId: opts.actorUserId,
+  });
+  return result.orders[0]!;
+}
+
+/**
+ * One wallet debit for the cart total; one PAID order per vendor group.
+ */
+export async function createPaidOrdersFromVendorGroups(opts: {
+  parentUserId: string;
+  studentId: string;
+  schoolId: string;
+  groups: VendorGroup[];
+  notes?: string;
+  paymentRef: string;
+  actorUserId?: string;
+}) {
+  if (opts.groups.length === 0) throw new AppError(400, "Cart is empty");
+
+  const totalMinor = opts.groups.reduce((s, g) => s + g.subtotalMinor, 0);
   const wallet = await ensureWalletForStudent(opts.studentId);
   const actorUserId = opts.actorUserId ?? opts.parentUserId;
+  const checkoutGroupId = opts.groups.length > 1 ? randomUUID() : null;
 
-  return prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
     const current = await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
-    if (current.balanceMinor < opts.subtotalMinor) {
+    if (current.balanceMinor < totalMinor) {
       throw new AppError(400, "Insufficient wallet balance");
     }
-    const balanceAfter = current.balanceMinor - opts.subtotalMinor;
+    const balanceAfter = current.balanceMinor - totalMinor;
     await tx.wallet.update({
       where: { id: wallet.id },
       data: { balanceMinor: balanceAfter },
     });
 
-    const created = await tx.order.create({
+    const orders: Array<{
+      id: string;
+      orderNumber: string;
+      totalMinor: number;
+      status: OrderStatus;
+      vendorId: string | null;
+      items: unknown[];
+    }> = [];
+
+    for (const group of opts.groups) {
+      const orderNumber = nextOrderNumber();
+      const order = await tx.order.create({
+        data: {
+          orderNumber,
+          parentUserId: opts.parentUserId,
+          studentId: opts.studentId,
+          schoolId: opts.schoolId,
+          vendorId: group.vendorId,
+          checkoutGroupId,
+          status: OrderStatus.PAID,
+          subtotalMinor: group.subtotalMinor,
+          totalMinor: group.subtotalMinor,
+          notes: opts.notes,
+          items: {
+            create: group.lines.map((l) => ({
+              productId: l.productId,
+              productName: l.name,
+              quantity: l.quantity,
+              unitPriceMinor: l.priceMinor,
+              totalMinor: l.priceMinor * l.quantity,
+            })),
+          },
+          statusHistory: {
+            create: {
+              toStatus: OrderStatus.PAID,
+              actorUserId,
+              note:
+                opts.groups.length > 1
+                  ? "Paid with student wallet (multi-vendor checkout)"
+                  : "Paid with student wallet",
+            },
+          },
+        },
+        include: { items: true },
+      });
+
+      await decrementAvailableStock(
+        tx,
+        group.lines.map((l) => ({ productId: l.productId, quantity: l.quantity, name: l.name })),
+      );
+
+      await postVendorPayableForOrder(tx, {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        vendorId: order.vendorId,
+        totalMinor: order.totalMinor,
+      });
+
+      orders.push(order);
+    }
+
+    const primary = orders[0]!;
+    const orderIds = orders.map((o) => o.id);
+
+    await tx.payment.create({
       data: {
-        orderNumber,
+        orderId: primary.id,
         parentUserId: opts.parentUserId,
         studentId: opts.studentId,
-        schoolId: opts.schoolId,
-        vendorId,
-        status: OrderStatus.PAID,
-        subtotalMinor: opts.subtotalMinor,
-        totalMinor: opts.subtotalMinor,
-        notes: opts.notes,
-        items: {
-          create: opts.lines.map((l) => ({
-            productId: l.productId,
-            productName: l.name,
-            quantity: l.quantity,
-            unitPriceMinor: l.priceMinor,
-            totalMinor: l.priceMinor * l.quantity,
-          })),
-        },
-        statusHistory: {
-          create: {
-            toStatus: OrderStatus.PAID,
-            actorUserId,
-            note: "Paid with student wallet",
-          },
-        },
-        payments: {
-          create: {
-            parentUserId: opts.parentUserId,
-            studentId: opts.studentId,
-            actorUserId,
-            purpose: PaymentPurpose.ORDER_CHECKOUT,
-            amountMinor: opts.subtotalMinor,
-            method: PaymentMethod.WALLET,
-            status: PaymentStatus.SUCCEEDED,
-            provider: "wallet",
-            providerRef: opts.paymentRef,
-            idempotencyKey: opts.paymentRef,
-            metadata: { source: "wallet_checkout" },
-          },
+        actorUserId,
+        purpose: PaymentPurpose.ORDER_CHECKOUT,
+        amountMinor: totalMinor,
+        method: PaymentMethod.WALLET,
+        status: PaymentStatus.SUCCEEDED,
+        provider: "wallet",
+        providerRef: opts.paymentRef,
+        idempotencyKey: opts.paymentRef,
+        metadata: {
+          source: "wallet_checkout",
+          checkoutGroupId,
+          orderIds,
         },
       },
-      include: { items: true },
     });
 
     await tx.walletTransaction.create({
       data: {
         walletId: wallet.id,
         type: "DEBIT_SPEND",
-        amountMinor: opts.subtotalMinor,
+        amountMinor: totalMinor,
         balanceAfterMinor: balanceAfter,
-        description: `Order ${created.orderNumber}`,
-        referenceId: created.id,
+        description:
+          orders.length === 1
+            ? `Order ${primary.orderNumber}`
+            : `Checkout ${orders.map((o) => o.orderNumber).join(", ")}`,
+        referenceId: checkoutGroupId ?? primary.id,
       },
-    });
-
-    for (const l of opts.lines) {
-      await tx.inventory.update({
-        where: { productId: l.productId },
-        data: { availableQty: { decrement: l.quantity } },
-      });
-    }
-
-    await postVendorPayableForOrder(tx, {
-      id: created.id,
-      orderNumber: created.orderNumber,
-      vendorId: created.vendorId,
-      totalMinor: created.totalMinor,
     });
 
     await notifyUser(
       {
         userId: opts.parentUserId,
-        title: "Order paid",
-        body: `Order ${created.orderNumber} was paid from the wallet and sent to the vendor.`,
-        metadata: { orderId: created.id },
+        title: orders.length === 1 ? "Order paid" : "Orders paid",
+        body:
+          orders.length === 1
+            ? `Order ${primary.orderNumber} was paid from the wallet and sent to the vendor.`
+            : `${orders.length} orders (${orders.map((o) => o.orderNumber).join(", ")}) were paid from the wallet and sent to vendors.`,
+        metadata: { orderId: primary.id, orderIds, checkoutGroupId },
       },
       tx,
     );
 
-    return created;
+    return { orders, totalMinor, checkoutGroupId };
   });
+
+  return {
+    orders: created.orders.map(summarizeOrder),
+    primary: summarizeOrder(created.orders[0]!),
+    totalMinor: created.totalMinor,
+    checkoutGroupId: created.checkoutGroupId,
+  };
 }
 
+/** Single-vendor pending order (backward-compatible wrapper). */
 export async function createPendingOrderFromLines(opts: {
   parentUserId: string;
   studentId: string;
@@ -175,58 +299,132 @@ export async function createPendingOrderFromLines(opts: {
     instructions?: string;
   };
 }) {
-  const vendorId = opts.lines[0]?.vendorId ?? null;
-  const orderNumber = `SM-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`;
-  const idempotencyKey = `order-${opts.payment.providerRef}`;
+  const groups = groupLinesByVendor(opts.lines);
+  const result = await createPendingOrdersFromVendorGroups({
+    parentUserId: opts.parentUserId,
+    studentId: opts.studentId,
+    schoolId: opts.schoolId,
+    groups,
+    notes: opts.notes,
+    payment: opts.payment,
+  });
+  return {
+    ...result.primary,
+    payments: result.payment ? [result.payment] : [],
+  };
+}
 
-  return prisma.order.create({
-    data: {
-      orderNumber,
-      parentUserId: opts.parentUserId,
-      studentId: opts.studentId,
-      schoolId: opts.schoolId,
-      vendorId,
-      status: OrderStatus.PENDING_PAYMENT,
-      subtotalMinor: opts.subtotalMinor,
-      totalMinor: opts.subtotalMinor,
-      notes: opts.notes,
-      items: {
-        create: opts.lines.map((l) => ({
-          productId: l.productId,
-          productName: l.name,
-          quantity: l.quantity,
-          unitPriceMinor: l.priceMinor,
-          totalMinor: l.priceMinor * l.quantity,
-        })),
-      },
-      statusHistory: {
-        create: {
-          toStatus: OrderStatus.PENDING_PAYMENT,
-          actorUserId: opts.parentUserId,
-          note: `Awaiting ${opts.payment.method} payment`,
-        },
-      },
-      payments: {
-        create: {
+/**
+ * Reserve stock for all lines; create one PENDING order per vendor; one Payment for the total.
+ */
+export async function createPendingOrdersFromVendorGroups(opts: {
+  parentUserId: string;
+  studentId: string;
+  schoolId: string;
+  groups: VendorGroup[];
+  notes?: string;
+  payment: {
+    method: PaymentMethod;
+    provider: string;
+    providerRef: string;
+    phoneE164?: string;
+    instructions?: string;
+  };
+}) {
+  if (opts.groups.length === 0) throw new AppError(400, "Cart is empty");
+
+  const totalMinor = opts.groups.reduce((s, g) => s + g.subtotalMinor, 0);
+  const checkoutGroupId = opts.groups.length > 1 ? randomUUID() : null;
+  const idempotencyKey = `order-${opts.payment.providerRef}`;
+  const allLines = opts.groups.flatMap((g) => g.lines);
+
+  const result = await prisma.$transaction(async (tx) => {
+    await reserveInventoryForLines(
+      tx,
+      allLines.map((l) => ({ productId: l.productId, quantity: l.quantity, name: l.name })),
+    );
+
+    const orders: Array<{
+      id: string;
+      orderNumber: string;
+      totalMinor: number;
+      status: OrderStatus;
+      vendorId: string | null;
+    }> = [];
+
+    for (const group of opts.groups) {
+      const order = await tx.order.create({
+        data: {
+          orderNumber: nextOrderNumber(),
           parentUserId: opts.parentUserId,
           studentId: opts.studentId,
-          actorUserId: opts.parentUserId,
-          purpose: PaymentPurpose.ORDER_CHECKOUT,
-          amountMinor: opts.subtotalMinor,
-          method: opts.payment.method,
-          status: PaymentStatus.PROCESSING,
-          provider: opts.payment.provider,
-          providerRef: opts.payment.providerRef,
-          idempotencyKey,
-          phoneE164: opts.payment.phoneE164 ?? null,
-          metadata: {
-            instructions: opts.payment.instructions ?? null,
+          schoolId: opts.schoolId,
+          vendorId: group.vendorId,
+          checkoutGroupId,
+          status: OrderStatus.PENDING_PAYMENT,
+          subtotalMinor: group.subtotalMinor,
+          totalMinor: group.subtotalMinor,
+          notes: opts.notes,
+          items: {
+            create: group.lines.map((l) => ({
+              productId: l.productId,
+              productName: l.name,
+              quantity: l.quantity,
+              unitPriceMinor: l.priceMinor,
+              totalMinor: l.priceMinor * l.quantity,
+            })),
+          },
+          statusHistory: {
+            create: {
+              toStatus: OrderStatus.PENDING_PAYMENT,
+              actorUserId: opts.parentUserId,
+              note:
+                opts.groups.length > 1
+                  ? `Awaiting ${opts.payment.method} payment (multi-vendor checkout)`
+                  : `Awaiting ${opts.payment.method} payment`,
+            },
           },
         },
+      });
+      orders.push(order);
+    }
+
+    const primary = orders[0]!;
+    const orderIds = orders.map((o) => o.id);
+
+    const payment = await tx.payment.create({
+      data: {
+        orderId: primary.id,
+        parentUserId: opts.parentUserId,
+        studentId: opts.studentId,
+        actorUserId: opts.parentUserId,
+        purpose: PaymentPurpose.ORDER_CHECKOUT,
+        amountMinor: totalMinor,
+        method: opts.payment.method,
+        status: PaymentStatus.PROCESSING,
+        provider: opts.payment.provider,
+        providerRef: opts.payment.providerRef,
+        idempotencyKey,
+        phoneE164: opts.payment.phoneE164 ?? null,
+        metadata: {
+          instructions: opts.payment.instructions ?? null,
+          stockReserved: true,
+          checkoutGroupId,
+          orderIds,
+        } as Prisma.InputJsonValue,
       },
-    },
-    include: { items: true, payments: true },
+    });
+
+    return { orders, payment, totalMinor, checkoutGroupId };
   });
+
+  return {
+    orders: result.orders.map(summarizeOrder),
+    primary: summarizeOrder(result.orders[0]!),
+    payment: result.payment,
+    totalMinor: result.totalMinor,
+    checkoutGroupId: result.checkoutGroupId,
+  };
 }
 
 export async function finalizeDirectOrderPayment(orderId: string, actorUserId?: string | null) {
@@ -258,12 +456,14 @@ export async function finalizeDirectOrderPayment(orderId: string, actorUserId?: 
         note: "Direct payment succeeded",
       },
     });
-    for (const item of order.items) {
-      await tx.inventory.update({
-        where: { productId: item.productId },
-        data: { availableQty: { decrement: item.quantity } },
-      });
-    }
+    await consumeInventoryReservation(
+      tx,
+      order.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        name: item.productName,
+      })),
+    );
     await postVendorPayableForOrder(tx, {
       id: updated.id,
       orderNumber: updated.orderNumber,
@@ -272,4 +472,65 @@ export async function finalizeDirectOrderPayment(orderId: string, actorUserId?: 
     });
     return updated;
   });
+}
+
+/** Finalize every pending sibling in a checkout group (or a single order). */
+export async function finalizeCheckoutGroupOrders(
+  orderIds: string[],
+  actorUserId?: string | null,
+): Promise<OrderSummary[]> {
+  const results: OrderSummary[] = [];
+  for (const id of orderIds) {
+    const paid = await finalizeDirectOrderPayment(id, actorUserId);
+    results.push(summarizeOrder(paid));
+  }
+  return results;
+}
+
+/** Cancel pending siblings and release inventory holds. */
+export async function cancelPendingCheckoutOrders(opts: {
+  orderIds: string[];
+  actorUserId?: string | null;
+  note: string;
+}) {
+  await prisma.$transaction(async (tx) => {
+    for (const orderId of opts.orderIds) {
+      const order = await tx.order.findUnique({ where: { id: orderId } });
+      if (!order) continue;
+      if (
+        order.status !== OrderStatus.PENDING_PAYMENT &&
+        order.status !== OrderStatus.PAYMENT_PROCESSING
+      ) {
+        continue;
+      }
+      const lines = await loadOrderInventoryLines(tx, orderId);
+      await releaseInventoryReservation(tx, lines);
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: OrderStatus.CANCELLED },
+      });
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId,
+          fromStatus: order.status,
+          toStatus: OrderStatus.CANCELLED,
+          actorUserId: opts.actorUserId,
+          note: opts.note,
+        },
+      });
+    }
+  });
+}
+
+export function orderIdsFromPaymentMetadata(
+  metadata: unknown,
+  fallbackOrderId: string | null,
+): string[] {
+  if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
+    const ids = (metadata as { orderIds?: unknown }).orderIds;
+    if (Array.isArray(ids) && ids.every((x) => typeof x === "string")) {
+      return ids as string[];
+    }
+  }
+  return fallbackOrderId ? [fallbackOrderId] : [];
 }

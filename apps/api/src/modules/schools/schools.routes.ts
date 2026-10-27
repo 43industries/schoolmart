@@ -1,5 +1,12 @@
 import type { FastifyInstance } from "fastify";
-import { createSchoolSchema, updateSchoolSchema } from "@schoolmart/shared";
+import {
+  createSchoolSchema,
+  updateSchoolSchema,
+  createStudentSchema,
+  schoolSettingsUpdateSchema,
+  putDeliveryWindowsSchema,
+  resetStudentPinSchema,
+} from "@schoolmart/shared";
 import {
   listPublicSchools,
   getPublicSchool,
@@ -8,9 +15,17 @@ import {
   listAllSchools,
   getSchoolById,
 } from "./schools.service.js";
-import { listSchoolStudents, createStudent } from "../students/students.service.js";
+import {
+  getSchoolOpsSettings,
+  updateSchoolOpsSettings,
+  replaceDeliveryWindows,
+} from "./school-settings.service.js";
+import {
+  listSchoolStudents,
+  createStudent,
+  resetStudentCollectionCredentials,
+} from "../students/students.service.js";
 import { listPendingLinks, approveLink, rejectLink } from "../parents/parents.service.js";
-import { createStudentSchema } from "@schoolmart/shared";
 import { authenticate, requireSuperAdmin, requireSchoolAdmin } from "../../middleware/auth.js";
 import { auditContextFromRequest } from "../audit/audit.service.js";
 import { ValidationError } from "../../lib/errors.js";
@@ -45,6 +60,60 @@ export async function schoolRoutes(app: FastifyInstance) {
 
     const student = await createStudent(id, parsed.data, auditContextFromRequest(req, req.user!.sub));
     return reply.status(201).send(student);
+  });
+
+  app.post("/:id/students/:studentId/reset-pin", {
+    preHandler: [authenticate, requireSchoolAdmin("id")],
+  }, async (req, reply) => {
+    const { id, studentId } = req.params as { id: string; studentId: string };
+    const parsed = resetStudentPinSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError("Validation failed", parsed.error.flatten());
+
+    const result = await resetStudentCollectionCredentials(
+      id,
+      studentId,
+      parsed.data,
+      auditContextFromRequest(req, req.user!.sub),
+    );
+    return reply.send(result);
+  });
+
+  app.get("/:id/settings", {
+    preHandler: [authenticate, requireSchoolAdmin("id")],
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const settings = await getSchoolOpsSettings(id);
+    return reply.send(settings);
+  });
+
+  app.patch("/:id/settings", {
+    preHandler: [authenticate, requireSchoolAdmin("id")],
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = schoolSettingsUpdateSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError("Validation failed", parsed.error.flatten());
+
+    const settings = await updateSchoolOpsSettings(
+      id,
+      parsed.data,
+      auditContextFromRequest(req, req.user!.sub),
+    );
+    return reply.send(settings);
+  });
+
+  app.put("/:id/delivery-windows", {
+    preHandler: [authenticate, requireSchoolAdmin("id")],
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = putDeliveryWindowsSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError("Validation failed", parsed.error.flatten());
+
+    const settings = await replaceDeliveryWindows(
+      id,
+      parsed.data,
+      auditContextFromRequest(req, req.user!.sub),
+    );
+    return reply.send(settings);
   });
 
   app.get("/:id/parent-links/pending", {

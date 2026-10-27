@@ -23,10 +23,12 @@ import { ForbiddenError, NotFoundError, ValidationError } from "../../lib/errors
 import { writeAuditLog, type AuditContext } from "../audit/audit.service.js";
 import { clearCart } from "../cart/cart.service.js";
 import {
+  cancelPendingCheckoutOrders,
   checkoutWithWallet,
-  createPendingOrderFromLines,
-  finalizeDirectOrderPayment,
+  createPendingOrdersFromVendorGroups,
+  finalizeCheckoutGroupOrders,
   loadCheckoutLines,
+  orderIdsFromPaymentMetadata,
 } from "../cart/checkout.service.js";
 import { ensureWalletForStudent } from "../wallets/wallets.service.js";
 import { getPaymentProvider, getProviderByName } from "./providers/index.js";
@@ -197,7 +199,7 @@ export async function createCheckoutIntent(
     throw new ValidationError("Phone number is required for M-PESA checkout");
   }
 
-  const { lines, subtotalMinor } = await loadCheckoutLines(
+  const { groups, subtotalMinor } = await loadCheckoutLines(
     parentUserId,
     input.schoolId,
     input.studentId,
@@ -214,12 +216,11 @@ export async function createCheckoutIntent(
     metadata: { studentId: input.studentId, accountRef: "ORDER" },
   });
 
-  const order = await createPendingOrderFromLines({
+  const pending = await createPendingOrdersFromVendorGroups({
     parentUserId,
     studentId: input.studentId,
     schoolId: input.schoolId,
-    lines,
-    subtotalMinor,
+    groups,
     notes: input.notes,
     payment: {
       method: prismaMethod,
@@ -233,25 +234,35 @@ export async function createCheckoutIntent(
   await writeAuditLog({
     action: "PAYMENT_CHECKOUT_INTENT_CREATED",
     resourceType: "Order",
-    resourceId: order.id,
+    resourceId: pending.primary.id,
     metadata: {
       method: prismaMethod,
       providerRef: initiated.providerRef,
       totalMinor: subtotalMinor,
+      orderIds: pending.orders.map((o) => o.id),
+      checkoutGroupId: pending.checkoutGroupId,
+      vendorCount: groups.length,
     },
     context: { ...ctx, actorUserId: parentUserId },
   });
 
-  const payment = order.payments[0];
   return {
     status: "PENDING_PAYMENT" as const,
     order: {
-      id: order.id,
-      orderNumber: order.orderNumber,
-      totalMinor: order.totalMinor,
-      status: order.status,
+      id: pending.primary.id,
+      orderNumber: pending.primary.orderNumber,
+      totalMinor: pending.primary.totalMinor,
+      status: pending.primary.status,
+      vendorId: pending.primary.vendorId,
     },
-    payment: payment ? serializePayment(payment) : null,
+    orders: pending.orders.map((o) => ({
+      id: o.id,
+      orderNumber: o.orderNumber,
+      totalMinor: o.totalMinor,
+      status: o.status,
+      vendorId: o.vendorId,
+    })),
+    payment: serializePayment(pending.payment),
     instructions: initiated.instructions,
     requiresConfirmation: true,
   };
@@ -340,36 +351,39 @@ export async function completeIntent(input: CompleteIntentInput, ctx: AuditConte
   }
 
   if (outcome === "FAILED") {
-    if (payment.orderId && payment.order && PAYABLE_ORDER_STATUSES.includes(payment.order.status)) {
-      await prisma.$transaction(async (tx) => {
-        await tx.order.update({
-          where: { id: payment.orderId! },
-          data: { status: OrderStatus.CANCELLED },
-        });
-        await tx.orderStatusHistory.create({
-          data: {
-            orderId: payment.orderId!,
-            fromStatus: payment.order!.status,
-            toStatus: OrderStatus.CANCELLED,
-            actorUserId: payment.actorUserId,
-            note: input.reason ?? reviewReason ?? "Payment failed",
-          },
-        });
+    const siblingIds = orderIdsFromPaymentMetadata(payment.metadata, payment.orderId);
+    if (siblingIds.length > 0) {
+      await cancelPendingCheckoutOrders({
+        orderIds: siblingIds,
+        actorUserId: payment.actorUserId,
+        note: input.reason ?? reviewReason ?? "Payment failed",
       });
     }
+    const failSource =
+      input.source === "timeout"
+        ? " (payment timed out — stock released; you can try again)"
+        : input.reason
+          ? ` (${input.reason})`
+          : "";
+    const orderLabel =
+      siblingIds.length > 1
+        ? `${siblingIds.length} orders`
+        : payment.order
+          ? `order ${payment.order.orderNumber}`
+          : null;
     await notifyUser({
       userId: payment.parentUserId,
       title: "Payment not completed",
-      body: payment.order
-        ? `Payment for order ${payment.order.orderNumber} did not complete${input.reason ? ` (${input.reason})` : ""}.`
-        : `Your ${payment.method} wallet top-up did not complete${input.reason ? ` (${input.reason})` : ""}.`,
-      metadata: { paymentId: payment.id, orderId: payment.orderId },
+      body: orderLabel
+        ? `Payment for ${orderLabel} did not complete${failSource}. ${siblingIds.length > 1 ? "The orders were" : "The order was"} cancelled.`
+        : `Your ${payment.method} wallet top-up did not complete${failSource}.`,
+      metadata: { paymentId: payment.id, orderId: payment.orderId, orderIds: siblingIds },
     });
     await writeAuditLog({
       action: reviewReason ? "PAYMENT_FLAGGED_FOR_REVIEW" : "PAYMENT_FAILED",
       resourceType: "Payment",
       resourceId: payment.id,
-      metadata: { source: input.source, reason: input.reason ?? reviewReason },
+      metadata: { source: input.source, reason: input.reason ?? reviewReason, orderIds: siblingIds },
       context: ctx,
     });
     return { payment: serializePayment(updated), alreadyFinal: false as const };
@@ -377,6 +391,9 @@ export async function completeIntent(input: CompleteIntentInput, ctx: AuditConte
 
   let balanceMinor: number | undefined;
   let orderResult: { id: string; orderNumber: string; totalMinor: number; status: string } | undefined;
+  let ordersResult:
+    | Array<{ id: string; orderNumber: string; totalMinor: number; status: string }>
+    | undefined;
 
   if (payment.purpose === PaymentPurpose.FUND_WALLET) {
     const credited = await creditWalletForFunding(updated);
@@ -388,8 +405,12 @@ export async function completeIntent(input: CompleteIntentInput, ctx: AuditConte
       metadata: { paymentId: payment.id, studentId: payment.studentId },
     });
   } else if (payment.purpose === PaymentPurpose.ORDER_CHECKOUT && payment.orderId && payment.order) {
-    const finalized = await finalizeOrSalvage(payment, ctx);
+    const finalized = await finalizeOrSalvage(
+      { ...payment, metadata: updated.metadata },
+      ctx,
+    );
     orderResult = finalized.order;
+    ordersResult = finalized.orders;
     balanceMinor = finalized.balanceMinor;
     if (finalized.paid && payment.parentUserId) {
       await clearCart(payment.parentUserId);
@@ -408,13 +429,14 @@ export async function completeIntent(input: CompleteIntentInput, ctx: AuditConte
     payment: serializePayment(updated),
     balanceMinor,
     order: orderResult,
+    orders: ordersResult,
     alreadyFinal: false as const,
   };
 }
 
 /**
- * Money arrived for an order. Mark it PAID; if the order can no longer be paid
- * (cancelled, timed out, stock problem) credit the child's wallet instead so funds are never lost.
+ * Money arrived for checkout. Finalize all sibling orders; if that fails or orders
+ * already closed, credit the child's wallet once so funds are never lost.
  */
 async function finalizeOrSalvage(
   payment: {
@@ -424,23 +446,49 @@ async function finalizeOrSalvage(
     parentUserId: string | null;
     actorUserId: string | null;
     amountMinor: number;
+    metadata?: unknown;
     order: { id: string; orderNumber: string; totalMinor: number; status: OrderStatus } | null;
   },
   ctx: AuditContext,
 ) {
   const order = payment.order!;
-  if (PAYABLE_ORDER_STATUSES.includes(order.status)) {
+  const siblingIds = orderIdsFromPaymentMetadata(payment.metadata, payment.orderId);
+  const payableSiblings = await prisma.order.findMany({
+    where: { id: { in: siblingIds }, status: { in: PAYABLE_ORDER_STATUSES } },
+    select: { id: true },
+  });
+
+  if (payableSiblings.length > 0) {
     try {
-      const paid = await finalizeDirectOrderPayment(order.id, payment.actorUserId ?? payment.parentUserId);
+      const paidOrders = await finalizeCheckoutGroupOrders(
+        payableSiblings.map((o) => o.id),
+        payment.actorUserId ?? payment.parentUserId,
+      );
+      const numbers = paidOrders.map((o) => o.orderNumber).join(", ");
       await notifyUser({
         userId: payment.parentUserId,
-        title: "Order paid",
-        body: `Order ${paid.orderNumber} is paid and has been sent to the vendor.`,
-        metadata: { orderId: paid.id },
+        title: paidOrders.length === 1 ? "Order paid" : "Orders paid",
+        body:
+          paidOrders.length === 1
+            ? `Order ${numbers} is paid and has been sent to the vendor.`
+            : `${paidOrders.length} orders (${numbers}) are paid and have been sent to vendors.`,
+        metadata: { orderId: paidOrders[0]?.id, orderIds: paidOrders.map((o) => o.id) },
       });
+      const primary = paidOrders[0]!;
       return {
         paid: true,
-        order: { id: paid.id, orderNumber: paid.orderNumber, totalMinor: paid.totalMinor, status: paid.status },
+        order: {
+          id: primary.id,
+          orderNumber: primary.orderNumber,
+          totalMinor: primary.totalMinor,
+          status: primary.status,
+        },
+        orders: paidOrders.map((o) => ({
+          id: o.id,
+          orderNumber: o.orderNumber,
+          totalMinor: o.totalMinor,
+          status: o.status,
+        })),
         balanceMinor: undefined,
       };
     } catch (err) {
@@ -448,8 +496,17 @@ async function finalizeOrSalvage(
         action: "ORDER_FINALIZE_FAILED",
         resourceType: "Order",
         resourceId: order.id,
-        metadata: { paymentId: payment.id, error: (err as Error).message },
+        metadata: {
+          paymentId: payment.id,
+          error: (err as Error).message,
+          orderIds: siblingIds,
+        },
         context: ctx,
+      });
+      await cancelPendingCheckoutOrders({
+        orderIds: siblingIds,
+        actorUserId: payment.actorUserId ?? payment.parentUserId,
+        note: "Cancelled after payment — order(s) could not be finalized; funds credited to wallet",
       });
     }
   }
@@ -466,22 +523,34 @@ async function finalizeOrSalvage(
     });
     balanceMinor = credited.balanceMinor;
   }
+  const refreshed = await prisma.order.findUnique({ where: { id: order.id } });
   await writeAuditLog({
     action: "PAYMENT_LATE_CREDITED_TO_WALLET",
     resourceType: "Payment",
     resourceId: payment.id,
-    metadata: { orderId: order.id, orderStatus: order.status, amountMinor: payment.amountMinor },
+    metadata: {
+      orderId: order.id,
+      orderIds: siblingIds,
+      orderStatus: refreshed?.status ?? order.status,
+      amountMinor: payment.amountMinor,
+    },
     context: ctx,
   });
   await notifyUser({
     userId: payment.parentUserId,
     title: "Payment credited to wallet",
-    body: `We received ${formatKES(payment.amountMinor)} for order ${order.orderNumber}, but the order had already closed. The amount was added to your child's wallet.`,
-    metadata: { orderId: order.id, paymentId: payment.id },
+    body: `We received ${formatKES(payment.amountMinor)} for order ${order.orderNumber}, but the order could not be completed. The amount was added to your child's wallet.`,
+    metadata: { orderId: order.id, paymentId: payment.id, orderIds: siblingIds },
   });
   return {
     paid: false,
-    order: { id: order.id, orderNumber: order.orderNumber, totalMinor: order.totalMinor, status: order.status },
+    order: {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      totalMinor: order.totalMinor,
+      status: refreshed?.status ?? order.status,
+    },
+    orders: undefined,
     balanceMinor,
   };
 }

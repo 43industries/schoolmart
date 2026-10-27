@@ -97,6 +97,7 @@ export default function SchoolDeliveriesPage() {
   const [incomingSel, setIncomingSel] = useState<Set<string>>(new Set());
   const [receivedSel, setReceivedSel] = useState<Set<string>>(new Set());
   const [pins, setPins] = useState<Record<string, string>>({});
+  const [qrTokens, setQrTokens] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -169,7 +170,7 @@ export default function SchoolDeliveriesPage() {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-brand-ink">Deliveries & collection</h2>
         <p className="text-brand-muted">
-          Receive parcels at the collection point, release them to students, and hand over with the student&apos;s PIN.
+          Receive parcels at the collection point, release them to students, and hand over with PIN or collection QR.
         </p>
       </div>
 
@@ -329,7 +330,7 @@ export default function SchoolDeliveriesPage() {
         <CardHeader>
           <CardTitle>Ready for collection ({board?.ready.length ?? 0})</CardTitle>
           <CardDescription>
-            Student enters their collection PIN at the desk, or confirms on their own phone.
+            Enter the student PIN, or paste/scan their collection QR token. Students can also confirm on their phone.
           </CardDescription>
         </CardHeader>
         {board && board.ready.length > 0 ? (
@@ -337,7 +338,7 @@ export default function SchoolDeliveriesPage() {
             {board.ready.map((o) => (
               <div
                 key={o.id}
-                className={`flex flex-col gap-3 rounded-xl border px-3 py-3 sm:flex-row sm:items-end sm:justify-between ${
+                className={`flex flex-col gap-3 rounded-xl border px-3 py-3 ${
                   o.uncollected ? "border-amber-200 bg-amber-50/50" : "border-gray-100"
                 }`}
               >
@@ -346,7 +347,7 @@ export default function SchoolDeliveriesPage() {
                   <p className="text-brand-muted">{studentLine(o)}</p>
                   <p className="text-xs text-brand-muted">{o.vendor?.name}</p>
                 </div>
-                <div className="flex items-end gap-2">
+                <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
                   <Input
                     label="Student PIN"
                     type="password"
@@ -355,12 +356,25 @@ export default function SchoolDeliveriesPage() {
                     value={pins[o.id] ?? ""}
                     onChange={(e) => setPins({ ...pins, [o.id]: e.target.value })}
                   />
+                  <Input
+                    label="Or paste QR token"
+                    value={qrTokens[o.id] ?? ""}
+                    onChange={(e) => setQrTokens({ ...qrTokens, [o.id]: e.target.value })}
+                    placeholder="schoolmart:collect:…"
+                  />
                   <Button
-                    disabled={busy || (pins[o.id] ?? "").length < 4}
+                    disabled={
+                      busy || ((pins[o.id] ?? "").length < 4 && !(qrTokens[o.id] ?? "").trim())
+                    }
                     onClick={() =>
                       run(async () => {
-                        await ordersApi.schoolHandover(schoolId, o.id, pins[o.id] ?? "");
+                        const pin = (pins[o.id] ?? "").trim();
+                        const qr = (qrTokens[o.id] ?? "").trim();
+                        await ordersApi.schoolHandover(schoolId!, o.id, {
+                          ...(qr ? { qrToken: qr } : { collectionPin: pin }),
+                        });
                         setPins((prev) => ({ ...prev, [o.id]: "" }));
+                        setQrTokens((prev) => ({ ...prev, [o.id]: "" }));
                         return `${o.orderNumber} handed over`;
                       })
                     }

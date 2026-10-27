@@ -6,6 +6,8 @@ import type {
   ProviderInitiateInput,
   ProviderInitiateResult,
   ProviderQueryResult,
+  ProviderRefundInput,
+  ProviderRefundResult,
   ProviderWebhookResult,
 } from "./types.js";
 
@@ -205,6 +207,70 @@ export const mpesaPaymentProvider: PaymentProvider = {
     return {
       status: Number(raw.ResultCode) === 0 ? "SUCCEEDED" : "FAILED",
       resultDesc: raw.ResultDesc,
+      raw,
+    };
+  },
+
+  async refund(input: ProviderRefundInput): Promise<ProviderRefundResult> {
+    assertConfigured();
+    const { initiatorName, securityCredential, shortcode, reversalResultUrl, reversalTimeoutUrl, callbackUrl } =
+      config.mpesa;
+    if (!initiatorName || !securityCredential) {
+      return {
+        status: "FAILED",
+        message:
+          "M-PESA reversal not configured (set MPESA_INITIATOR_NAME and MPESA_SECURITY_CREDENTIAL). Use wallet credit instead.",
+      };
+    }
+    const resultUrl = reversalResultUrl || callbackUrl;
+    const timeoutUrl = reversalTimeoutUrl || callbackUrl;
+    if (!resultUrl || !timeoutUrl) {
+      return {
+        status: "FAILED",
+        message: "M-PESA reversal result/timeout URLs are not configured.",
+      };
+    }
+
+    const token = await getAccessToken();
+    const amountKes = Math.max(1, Math.round(input.amountMinor / 100));
+    const res = await fetch(`${darajaBaseUrl()}/mpesa/reversal/v1/request`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        Initiator: initiatorName,
+        SecurityCredential: securityCredential,
+        CommandID: "TransactionReversal",
+        TransactionID: input.receipt,
+        Amount: amountKes,
+        ReceiverParty: shortcode,
+        RecieverIdentifierType: "11",
+        ResultURL: resultUrl,
+        QueueTimeOutURL: timeoutUrl,
+        Remarks: input.reason.slice(0, 100),
+        Occasion: "SchoolMart refund",
+      }),
+    });
+    const raw = (await res.json().catch(() => ({}))) as {
+      ResponseCode?: string;
+      ResponseDescription?: string;
+      ConversationID?: string;
+      OriginatorConversationID?: string;
+      errorMessage?: string;
+    };
+    if (!res.ok || (raw.ResponseCode && raw.ResponseCode !== "0")) {
+      return {
+        status: "FAILED",
+        message: raw.errorMessage ?? raw.ResponseDescription ?? "M-PESA reversal request failed",
+        raw,
+      };
+    }
+    return {
+      status: "PENDING",
+      providerRefundRef: raw.ConversationID ?? raw.OriginatorConversationID,
+      message: raw.ResponseDescription ?? "Reversal queued with Safaricom",
       raw,
     };
   },

@@ -11,6 +11,10 @@ import { AppError, ForbiddenError, NotFoundError, UnauthorizedError, ValidationE
 import { verifyPin } from "../../lib/crypto.js";
 import { writeAuditLog, type AuditContext } from "../audit/audit.service.js";
 import { refundOrderToWallet, transitionOrders } from "./order-lifecycle.service.js";
+import {
+  parseCollectionQrToken,
+  secretsMatch,
+} from "../students/students.service.js";
 
 const orderListInclude = {
   items: { select: { id: true, productName: true, quantity: true, totalMinor: true } },
@@ -255,31 +259,66 @@ export async function markSchoolOrdersReady(params: {
   return { moved };
 }
 
-/** Desk handover: staff enters the student's collection PIN on the school device. */
+/** Desk handover: staff enters the student's collection PIN or pastes/scans their QR token. */
 export async function handoverAtDesk(params: {
   schoolId: string;
   orderId: string;
-  collectionPin: string;
+  collectionPin?: string;
+  qrToken?: string;
   actorUserId: string;
   ctx: AuditContext;
 }) {
   const order = await prisma.order.findFirst({
     where: { id: params.orderId, schoolId: params.schoolId, status: OrderStatus.READY_FOR_COLLECTION },
-    include: { student: { select: { id: true, collectionPinHash: true } } },
+    include: {
+      student: { select: { id: true, collectionPinHash: true, qrSecret: true } },
+      school: { select: { collectionPinRequired: true } },
+    },
   });
   if (!order) throw new NotFoundError("Order is not ready for collection at this school");
-  if (!order.student.collectionPinHash) throw new ForbiddenError("Student has no collection PIN set");
 
-  const ok = await verifyPin(order.student.collectionPinHash, params.collectionPin);
-  if (!ok) {
-    await writeAuditLog({
-      action: "COLLECTION_PIN_FAILED",
-      resourceType: "Order",
-      resourceId: order.id,
-      metadata: { studentId: order.student.id, channel: "school_desk" },
-      context: { ...params.ctx, actorUserId: params.actorUserId },
-    });
-    throw new UnauthorizedError("Invalid collection PIN");
+  let method: "pin" | "qr" | null = null;
+
+  if (params.qrToken) {
+    const parsed = parseCollectionQrToken(params.qrToken);
+    const secretOk =
+      parsed &&
+      parsed.studentId === order.student.id &&
+      order.student.qrSecret &&
+      secretsMatch(parsed.secret, order.student.qrSecret);
+    if (!secretOk) {
+      await writeAuditLog({
+        action: "COLLECTION_QR_FAILED",
+        resourceType: "Order",
+        resourceId: order.id,
+        metadata: { studentId: order.student.id, channel: "school_desk" },
+        context: { ...params.ctx, actorUserId: params.actorUserId },
+      });
+      throw new UnauthorizedError("Invalid collection QR");
+    }
+    method = "qr";
+  } else if (params.collectionPin) {
+    if (!order.student.collectionPinHash) {
+      throw new ForbiddenError(
+        order.school.collectionPinRequired
+          ? "Student has no collection PIN set"
+          : "Collection PIN is not configured for this student — use QR instead",
+      );
+    }
+    const ok = await verifyPin(order.student.collectionPinHash, params.collectionPin);
+    if (!ok) {
+      await writeAuditLog({
+        action: "COLLECTION_PIN_FAILED",
+        resourceType: "Order",
+        resourceId: order.id,
+        metadata: { studentId: order.student.id, channel: "school_desk" },
+        context: { ...params.ctx, actorUserId: params.actorUserId },
+      });
+      throw new UnauthorizedError("Invalid collection PIN");
+    }
+    method = "pin";
+  } else {
+    throw new ValidationError("Provide a collection PIN or QR token");
   }
 
   await transitionOrders({
@@ -287,13 +326,16 @@ export async function handoverAtDesk(params: {
     from: [OrderStatus.READY_FOR_COLLECTION],
     to: OrderStatus.COLLECTED,
     actorUserId: params.actorUserId,
-    note: "Handed over at school desk (PIN verified)",
+    note:
+      method === "qr"
+        ? "Handed over at school desk (QR verified)"
+        : "Handed over at school desk (PIN verified)",
   });
   await writeAuditLog({
     action: "ORDER_COLLECTED",
     resourceType: "Order",
     resourceId: order.id,
-    metadata: { studentId: order.student.id, channel: "school_desk" },
+    metadata: { studentId: order.student.id, channel: "school_desk", method },
     context: { ...params.ctx, actorUserId: params.actorUserId },
   });
   return { id: order.id, status: OrderStatus.COLLECTED };
@@ -605,6 +647,9 @@ export async function deliverBatch(params: {
   batchId: string;
   recipientName: string;
   notes?: string;
+  latitude?: number;
+  longitude?: number;
+  photoUrl?: string;
   actorUserId: string;
   ctx: AuditContext;
 }) {
@@ -619,6 +664,9 @@ export async function deliverBatch(params: {
     recipientName: params.recipientName,
     notes: params.notes ?? null,
     deliveredAt: deliveredAt.toISOString(),
+    latitude: params.latitude ?? null,
+    longitude: params.longitude ?? null,
+    photoUrl: params.photoUrl ?? null,
   };
 
   await prisma.$transaction(async (tx) => {

@@ -3,16 +3,18 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, getPrimaryRole, getDashboardPath } from "@/lib/auth-context";
-import { adminApi } from "@/lib/api";
+import { adminOpsApi } from "@/lib/api";
 import { adminNavItems } from "@/lib/admin-nav";
 import { PortalLayout } from "@/components/layout/portal-layout";
 import { Card } from "@/components/ui/card";
-import { School, Users, FileText } from "lucide-react";
+import { School, Users, FileText, ShoppingBag, CreditCard, Package } from "lucide-react";
+
+type Stats = Awaited<ReturnType<typeof adminOpsApi.stats>>;
 
 export default function AdminDashboard() {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const [schoolCount, setSchoolCount] = useState(0);
+  const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
@@ -22,24 +24,33 @@ export default function AdminDashboard() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    adminApi.schools().then((res) => setSchoolCount((res.schools as unknown[]).length)).catch(() => {});
+    adminOpsApi.stats().then(setStats).catch(() => setStats(null));
   }, []);
 
   if (loading || !user) return null;
 
+  const cards = [
+    { icon: School, label: "Schools", value: stats?.schools ?? "—" },
+    { icon: Users, label: "Active users", value: stats?.activeUsers ?? "—" },
+    { icon: ShoppingBag, label: "Orders", value: stats?.orders ?? "—" },
+    { icon: Package, label: "Ready to collect", value: stats?.readyForCollection ?? "—" },
+    { icon: CreditCard, label: "Pending payments", value: stats?.pendingPayments ?? "—" },
+    { icon: CreditCard, label: "Failed payments (24h)", value: stats?.failedPayments24h ?? "—" },
+    { icon: CreditCard, label: "Payments needing review", value: stats?.paymentsNeedingReview ?? "—" },
+    { icon: FileText, label: "Audit events", value: stats?.auditEvents ?? "—" },
+  ];
+
   return (
     <PortalLayout title="Super Admin" navItems={adminNavItems}>
       <div className="mb-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-bold text-brand-ink">Platform Dashboard</h2>
-        <p className="mt-1 text-brand-muted">Manage schools, users, and platform settings.</p>
+        <h2 className="text-2xl font-bold text-brand-ink">Platform control tower</h2>
+        <p className="mt-1 text-brand-muted">
+          Live counts across schools, payments, and collection. Review flagged payments under Payments.
+        </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        {[
-          { icon: School, label: "Schools", value: schoolCount },
-          { icon: Users, label: "Active Users", value: "—" },
-          { icon: FileText, label: "Audit Events", value: "—" },
-        ].map((stat) => (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {cards.map((stat) => (
           <Card key={stat.label}>
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-teal/10">
               <stat.icon className="h-5 w-5 text-brand-teal" />

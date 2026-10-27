@@ -240,14 +240,22 @@ POST   /api/v1/admin/users
 GET    /api/v1/admin/audit-logs
 ```
 
+## Smoke tests
+
+```bash
+# API must be running + DB seeded
+pnpm smoke:demo-logins
+pnpm smoke:e2e-checkout
+```
+
 ## Roadmap
 
-- **Phase 2:** Marketplace (vendors, catalog, cart)
-- **Phase 3:** Orders & payments (M-PESA mock, state machine)
+- **Phase 2:** Marketplace (vendors, catalog, cart) — multi-vendor checkout supported
+- **Phase 3:** Orders & payments (M-PESA STK + mock; wallet refunds; optional M-PESA reversal)
 - **Phase 4:** Student wallet (funding, rules, ledger)
-- **Phase 5:** School operations (delivery batches, collection)
+- **Phase 5:** School operations (delivery batches, collection, settings)
 - **Phase 6:** Student experience (PIN/QR, collection UI)
 - **Phase 7:** Vendor operations
-- **Phase 8:** Logistics
-- **Phase 9:** Admin finance
-- **Phase 10:** Notifications, support, analytics
+- **Phase 8:** Logistics (jobs + GPS POD capture)
+- **Phase 9:** Admin finance / control-tower stats
+- **Phase 10:** Notifications (in-app + optional SMS/email), support tickets still open

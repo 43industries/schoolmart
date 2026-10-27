@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { prisma, Role, ScopeType, UserStatus, OrderStatus } from "@schoolmart/db";
 import type { ActivateStudentInput, ConfirmCollectionInput } from "@schoolmart/shared";
 import { ConflictError, ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
@@ -5,6 +6,11 @@ import { hashPassword, verifyPin } from "../../lib/crypto.js";
 import { writeAuditLog, type AuditContext } from "../audit/audit.service.js";
 import { ensureWalletForStudent } from "../wallets/wallets.service.js";
 import { transitionOrders } from "../orders/order-lifecycle.service.js";
+import {
+  buildCollectionQrToken,
+  parseCollectionQrToken,
+  secretsMatch,
+} from "./students.service.js";
 
 async function getStudentForUser(userId: string) {
   const student = await prisma.student.findUnique({
@@ -187,16 +193,44 @@ export async function listStudentCollections(userId: string) {
   }));
 }
 
+export async function getStudentCollectionQr(userId: string) {
+  const student = await getStudentForUser(userId);
+  let qrSecret = student.qrSecret;
+  if (!qrSecret) {
+    qrSecret = randomBytes(16).toString("hex");
+    await prisma.student.update({ where: { id: student.id }, data: { qrSecret } });
+  }
+  return {
+    studentId: student.id,
+    qrToken: buildCollectionQrToken(student.id, qrSecret),
+  };
+}
+
 export async function confirmStudentCollection(
   userId: string,
   input: ConfirmCollectionInput,
   ctx: AuditContext,
 ) {
   const student = await getStudentForUser(userId);
-  if (!student.collectionPinHash) throw new ForbiddenError("Collection PIN is not configured");
 
-  const pinOk = await verifyPin(student.collectionPinHash, input.collectionPin);
-  if (!pinOk) throw new UnauthorizedError("Invalid collection PIN");
+  let method: "pin" | "qr" = "pin";
+  if (input.qrToken) {
+    const parsed = parseCollectionQrToken(input.qrToken);
+    const ok =
+      parsed &&
+      parsed.studentId === student.id &&
+      student.qrSecret &&
+      secretsMatch(parsed.secret, student.qrSecret);
+    if (!ok) throw new UnauthorizedError("Invalid collection QR");
+    method = "qr";
+  } else if (input.collectionPin) {
+    if (!student.collectionPinHash) throw new ForbiddenError("Collection PIN is not configured");
+    const pinOk = await verifyPin(student.collectionPinHash, input.collectionPin);
+    if (!pinOk) throw new UnauthorizedError("Invalid collection PIN");
+    method = "pin";
+  } else {
+    throw new ForbiddenError("Provide a collection PIN or QR token");
+  }
 
   const order = await prisma.order.findFirst({
     where: {
@@ -212,7 +246,7 @@ export async function confirmStudentCollection(
     from: [OrderStatus.READY_FOR_COLLECTION],
     to: OrderStatus.COLLECTED,
     actorUserId: userId,
-    note: "Collected by student",
+    note: method === "qr" ? "Collected by student (QR)" : "Collected by student (PIN)",
   });
   if (moved.length === 0) throw new NotFoundError("Order not ready for collection");
   const updated = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
@@ -221,7 +255,7 @@ export async function confirmStudentCollection(
     action: "ORDER_COLLECTED",
     resourceType: "Order",
     resourceId: order.id,
-    metadata: { studentId: student.id },
+    metadata: { studentId: student.id, method },
     context: { ...ctx, actorUserId: userId },
   });
 

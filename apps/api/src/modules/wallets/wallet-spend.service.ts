@@ -1,12 +1,15 @@
 import { prisma, WalletSpendStatus } from "@schoolmart/db";
-import type { ApproveWalletSpendInput } from "@schoolmart/shared";
+import { formatKES, type ApproveWalletSpendInput } from "@schoolmart/shared";
 import { randomUUID } from "node:crypto";
 import { AppError, NotFoundError } from "../../lib/errors.js";
 import { writeAuditLog, type AuditContext } from "../audit/audit.service.js";
 import { clearCart } from "../cart/cart.service.js";
+import { notifyUser } from "../notifications/notifications.service.js";
 import {
-  createPaidOrderFromLines,
+  createPaidOrdersFromVendorGroups,
+  groupLinesByVendor,
   type CartLine,
+  type VendorGroup,
 } from "../cart/order-payment.service.js";
 import { ensureWalletForStudent } from "./wallets.service.js";
 
@@ -105,12 +108,13 @@ export async function debitWalletSpend(opts: {
   });
 }
 
-/** Shared eval → pending spend request OR paid wallet order. */
+/** Shared eval → pending spend request OR paid wallet order(s). */
 export async function executeWalletCheckout(opts: {
   parentUserId: string;
   studentId: string;
   schoolId: string;
   lines: CartLine[];
+  groups?: VendorGroup[];
   subtotalMinor: number;
   category: string;
   notes?: string;
@@ -125,6 +129,7 @@ export async function executeWalletCheckout(opts: {
   auditMetadata?: Record<string, unknown>;
   ctx: AuditContext;
 }) {
+  const groups = opts.groups ?? groupLinesByVendor(opts.lines);
   const evalResult = await evaluateWalletSpend(opts.studentId, opts.subtotalMinor, opts.category);
   if (!evalResult.ok) {
     throw new AppError(400, evalResult.reason);
@@ -158,9 +163,17 @@ export async function executeWalletCheckout(opts: {
       metadata: {
         amountMinor: opts.subtotalMinor,
         studentId: opts.studentId,
+        vendorCount: groups.length,
         ...opts.auditMetadata,
       },
       context: { ...opts.ctx, actorUserId: opts.actorUserId },
+    });
+
+    await notifyUser({
+      userId: opts.parentUserId,
+      title: "Wallet spend needs approval",
+      body: opts.pendingMessage || `Approve a ${formatKES(opts.subtotalMinor)} spend on the Wallet page.`,
+      metadata: { spendRequestId: spend.id, studentId: opts.studentId },
     });
 
     return {
@@ -172,12 +185,11 @@ export async function executeWalletCheckout(opts: {
   }
 
   const paymentRef = `${opts.paymentRefPrefix}-${randomUUID()}`;
-  const order = await createPaidOrderFromLines({
+  const paid = await createPaidOrdersFromVendorGroups({
     parentUserId: opts.parentUserId,
     studentId: opts.studentId,
     schoolId: opts.schoolId,
-    lines: opts.lines,
-    subtotalMinor: opts.subtotalMinor,
+    groups,
     notes: opts.notes,
     paymentRef,
     actorUserId: opts.actorUserId,
@@ -190,19 +202,32 @@ export async function executeWalletCheckout(opts: {
   await writeAuditLog({
     action: opts.paidAuditAction,
     resourceType: "Order",
-    resourceId: order.id,
-    metadata: { totalMinor: opts.subtotalMinor, ...opts.auditMetadata },
+    resourceId: paid.primary.id,
+    metadata: {
+      totalMinor: opts.subtotalMinor,
+      orderIds: paid.orders.map((o) => o.id),
+      checkoutGroupId: paid.checkoutGroupId,
+      ...opts.auditMetadata,
+    },
     context: { ...opts.ctx, actorUserId: opts.actorUserId },
   });
 
   return {
     status: "PAID" as const,
     order: {
-      id: order.id,
-      orderNumber: order.orderNumber,
-      totalMinor: order.totalMinor,
-      status: order.status,
+      id: paid.primary.id,
+      orderNumber: paid.primary.orderNumber,
+      totalMinor: paid.primary.totalMinor,
+      status: paid.primary.status,
+      vendorId: paid.primary.vendorId,
     },
+    orders: paid.orders.map((o) => ({
+      id: o.id,
+      orderNumber: o.orderNumber,
+      totalMinor: o.totalMinor,
+      status: o.status,
+      vendorId: o.vendorId,
+    })),
   };
 }
 
@@ -261,6 +286,7 @@ export async function reviewWalletSpend(
     studentId: snapshot.studentId,
     schoolId: snapshot.schoolId,
     lines: snapshot.lines,
+    groups: groupLinesByVendor(snapshot.lines),
     subtotalMinor: snapshot.subtotalMinor,
     category: spend.category,
     notes: snapshot.notes,
@@ -291,5 +317,6 @@ export async function reviewWalletSpend(
       orderNumber: result.order.orderNumber,
       totalMinor: result.order.totalMinor,
     },
+    orders: result.orders,
   };
 }

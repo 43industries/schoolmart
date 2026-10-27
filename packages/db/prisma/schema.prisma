@@ -603,6 +603,7 @@ model Order {
   deliveryDate    DateTime?   @map("delivery_date")
   notes           String?
   deliveryBatchId String?     @map("delivery_batch_id")
+  checkoutGroupId String?     @map("checkout_group_id")
   createdAt       DateTime    @default(now()) @map("created_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
 
@@ -618,6 +619,7 @@ model Order {
   @@index([schoolId])
   @@index([status])
   @@index([deliveryBatchId])
+  @@index([checkoutGroupId])
   @@map("orders")
 }
 

@@ -51,6 +51,7 @@ export default function AdminOrdersPage() {
   const [refundFor, setRefundFor] = useState<AdminOrder | null>(null);
   const [refundKes, setRefundKes] = useState("");
   const [refundReason, setRefundReason] = useState("");
+  const [refundDestination, setRefundDestination] = useState<"WALLET" | "ORIGINAL_RAIL">("WALLET");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -87,13 +88,21 @@ export default function AdminOrdersPage() {
       const res = await adminOpsApi.refund(refundFor.id, {
         amountMinor: amountKes !== undefined ? toMinorUnits(amountKes) : undefined,
         reason: refundReason.trim(),
+        destination: refundDestination,
       });
+      const via =
+        res.destination === "WALLET" || !res.destination
+          ? "credited to the child's wallet"
+          : `via ${res.destination.replace(/_/g, " ").toLowerCase()}`;
       setMessage(
-        `${res.full ? "Full" : "Partial"} refund of ${formatKES(res.amountMinor)} credited to the child's wallet for ${refundFor.orderNumber}`,
+        `${res.full ? "Full" : "Partial"} refund of ${formatKES(res.amountMinor)} ${via} for ${refundFor.orderNumber}${
+          res.railMessage ? ` (${res.railMessage})` : ""
+        }`,
       );
       setRefundFor(null);
       setRefundKes("");
       setRefundReason("");
+      setRefundDestination("WALLET");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Refund failed");
@@ -109,7 +118,8 @@ export default function AdminOrdersPage() {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-brand-ink">Orders & refunds</h2>
         <p className="text-brand-muted">
-          Refunds are credited to the child&apos;s wallet and reverse the vendor payable by the same amount.
+          Refund to the child wallet (default) or attempt an M-PESA reversal when a receipt exists. Vendor payables are
+          reversed either way.
         </p>
       </div>
 
@@ -136,7 +146,7 @@ export default function AdminOrdersPage() {
               Order total {formatKES(refundFor.totalMinor)}. Leave the amount blank for a full refund of what remains.
             </CardDescription>
           </CardHeader>
-          <form onSubmit={submitRefund} className="grid gap-3 sm:grid-cols-[160px_1fr_auto] sm:items-end">
+          <form onSubmit={submitRefund} className="grid gap-3 sm:grid-cols-2">
             <Input
               label="Amount (KES)"
               type="number"
@@ -145,6 +155,15 @@ export default function AdminOrdersPage() {
               onChange={(e) => setRefundKes(e.target.value)}
               placeholder="Full"
             />
+            <Select
+              label="Destination"
+              value={refundDestination}
+              onChange={(e) => setRefundDestination(e.target.value as "WALLET" | "ORIGINAL_RAIL")}
+              options={[
+                { value: "WALLET", label: "Child wallet (always available)" },
+                { value: "ORIGINAL_RAIL", label: "Original rail (M-PESA reversal if possible)" },
+              ]}
+            />
             <Input
               label="Reason (shown to parent)"
               value={refundReason}
@@ -152,7 +171,7 @@ export default function AdminOrdersPage() {
               required
               minLength={3}
             />
-            <div className="flex gap-2">
+            <div className="flex items-end gap-2">
               <Button type="submit" disabled={busy || refundReason.trim().length < 3}>
                 {busy ? "Refunding…" : "Refund"}
               </Button>

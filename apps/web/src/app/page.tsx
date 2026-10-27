@@ -94,7 +94,7 @@ export default function HomePage() {
               {[
                 { icon: Wallet, title: "Parent-controlled wallet", desc: "Fund your child's wallet with spending limits and category controls — you stay in charge." },
                 { icon: Package, title: "Anything to school", desc: "Meals, essentials, care packages and more — ordered online, delivered to campus." },
-                { icon: Shield, title: "Secure collection", desc: "PIN, QR code, or student ID verification so only your child collects." },
+                { icon: Shield, title: "Secure collection", desc: "PIN or QR verification at the school desk so only your child collects." },
                 { icon: Truck, title: "Last-mile delivery", desc: "Vendors aggregate orders and complete delivery to the school collection point." },
                 { icon: MapPin, title: "Full order tracking", desc: "Parents order, pay and track from checkout to collection confirmation." },
                 { icon: Store, title: "Multi-vendor marketplace", desc: "A range of vendors selling meals, supplies, personal care and campus essentials." },

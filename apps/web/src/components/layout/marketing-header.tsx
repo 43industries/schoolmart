@@ -54,6 +54,8 @@ export function MarketingFooter() {
               <li><Link href="/contact" className="hover:text-brand-teal">Contact</Link></li>
               <li><Link href="/about" className="hover:text-brand-teal">About</Link></li>
               <li><Link href="/privacy" className="hover:text-brand-teal">Privacy &amp; data protection</Link></li>
+              <li><Link href="/terms" className="hover:text-brand-teal">Terms of service</Link></li>
+              <li><Link href="/deliveries/terms" className="hover:text-brand-teal">Delivery partner terms</Link></li>
             </ul>
           </div>
           <div>

@@ -490,7 +490,20 @@ export const cartApi = {
   }) =>
     api<{
       status: "PAID" | "PENDING_APPROVAL" | "PENDING_PAYMENT";
-      order?: { id: string; orderNumber: string; totalMinor: number; status: string };
+      order?: {
+        id: string;
+        orderNumber: string;
+        totalMinor: number;
+        status: string;
+        vendorId?: string | null;
+      };
+      orders?: Array<{
+        id: string;
+        orderNumber: string;
+        totalMinor: number;
+        status: string;
+        vendorId?: string | null;
+      }>;
       payment?: {
         id: string;
         status: string;
@@ -525,8 +538,61 @@ export interface SchoolDeliveryPartnerRow {
   deliveryPartner: DeliveryPartnerSummary;
 }
 
+export type SchoolOpsSettings = {
+  id: string;
+  name: string;
+  collectionPinRequired: boolean;
+  deliveryNotes: string | null;
+  windows: Array<{
+    id: string;
+    name: string;
+    startTime: string;
+    endTime: string;
+    daysOfWeek: number[];
+    active: boolean;
+  }>;
+};
+
 export const schoolAdminApi = {
   students: (schoolId: string) => api<{ students: unknown[] }>(`/schools/${schoolId}/students`),
+  createStudent: (
+    schoolId: string,
+    data: {
+      studentNumber: string;
+      firstName: string;
+      middleName?: string;
+      lastName: string;
+      preferredName?: string;
+      grade: string;
+      className?: string;
+      boardingStatus: "BOARDING" | "DAY";
+      collectionPin?: string;
+    },
+  ) => api(`/schools/${schoolId}/students`, { method: "POST", body: data }),
+  resetStudentPin: (schoolId: string, studentId: string, collectionPin: string) =>
+    api<{ id: string; ok: true }>(`/schools/${schoolId}/students/${studentId}/reset-pin`, {
+      method: "POST",
+      body: { collectionPin },
+    }),
+  settings: (schoolId: string) => api<SchoolOpsSettings>(`/schools/${schoolId}/settings`),
+  updateSettings: (
+    schoolId: string,
+    data: { deliveryNotes?: string | null; collectionPinRequired?: boolean },
+  ) => api<SchoolOpsSettings>(`/schools/${schoolId}/settings`, { method: "PATCH", body: data }),
+  putDeliveryWindows: (
+    schoolId: string,
+    windows: Array<{
+      name: string;
+      startTime: string;
+      endTime: string;
+      daysOfWeek: number[];
+      active: boolean;
+    }>,
+  ) =>
+    api<SchoolOpsSettings>(`/schools/${schoolId}/delivery-windows`, {
+      method: "PUT",
+      body: { windows },
+    }),
   pendingLinks: (schoolId: string) => api<{ links: unknown[] }>(`/schools/${schoolId}/parent-links/pending`),
   approveLink: (schoolId: string, linkId: string) =>
     api(`/schools/${schoolId}/parent-links/${linkId}/approve`, { method: "POST" }),
@@ -686,11 +752,12 @@ export const studentsApi = {
   me: () => api<StudentProfile>("/students/me"),
   wallet: () => api<StudentWallet>("/students/me/wallet"),
   collections: () => api<{ collections: StudentCollection[] }>("/students/me/collections"),
-  confirmCollection: (data: { orderId: string; collectionPin: string }) =>
+  confirmCollection: (data: { orderId: string; collectionPin?: string; qrToken?: string }) =>
     api<{ id: string; orderNumber: string; status: string }>("/students/me/collections/confirm", {
       method: "POST",
       body: data,
     }),
+  collectionQr: () => api<{ studentId: string; qrToken: string }>("/students/me/collection-qr"),
   activities: () =>
     api<{
       activities: Array<{
@@ -914,10 +981,14 @@ export const ordersApi = {
     api<{ moved: string[] }>(`/orders/school/${schoolId}/receive`, { method: "POST", body: { orderIds } }),
   schoolReady: (schoolId: string, orderIds: string[]) =>
     api<{ moved: string[] }>(`/orders/school/${schoolId}/ready`, { method: "POST", body: { orderIds } }),
-  schoolHandover: (schoolId: string, orderId: string, collectionPin: string) =>
+  schoolHandover: (
+    schoolId: string,
+    orderId: string,
+    creds: { collectionPin?: string; qrToken?: string },
+  ) =>
     api<{ id: string; status: string }>(`/orders/school/${schoolId}/handover/${orderId}`, {
       method: "POST",
-      body: { collectionPin },
+      body: creds,
     }),
   driverMe: () =>
     api<{
@@ -939,8 +1010,16 @@ export const ordersApi = {
     }),
   driverBatches: () => api<{ batches: DriverBatch[] }>("/orders/driver/batches"),
   driverPickup: (id: string) => api<{ id: string; status: string }>(`/orders/driver/batches/${id}/pickup`, { method: "POST" }),
-  driverDeliver: (id: string, data: { recipientName: string; notes?: string }) =>
-    api<{ id: string; status: string }>(`/orders/driver/batches/${id}/deliver`, { method: "POST", body: data }),
+  driverDeliver: (
+    id: string,
+    data: {
+      recipientName: string;
+      notes?: string;
+      latitude?: number;
+      longitude?: number;
+      photoUrl?: string;
+    },
+  ) => api<{ id: string; status: string }>(`/orders/driver/batches/${id}/deliver`, { method: "POST", body: data }),
   driverFail: (id: string, reason: string) =>
     api<{ id: string; status: string }>(`/orders/driver/batches/${id}/fail`, { method: "POST", body: { reason } }),
 };
@@ -993,11 +1072,33 @@ export const adminOpsApi = {
     if (params.q) qs.set("q", params.q);
     return api<{ orders: AdminOrder[] }>(`/admin/orders?${qs}`);
   },
-  refund: (id: string, data: { amountMinor?: number; reason: string }) =>
-    api<{ amountMinor: number; full: boolean; refundedTotalMinor: number }>(`/admin/orders/${id}/refund`, {
+  refund: (
+    id: string,
+    data: { amountMinor?: number; reason: string; destination?: "WALLET" | "ORIGINAL_RAIL" },
+  ) =>
+    api<{
+      amountMinor: number;
+      full: boolean;
+      refundedTotalMinor: number;
+      destination?: string;
+      railMessage?: string;
+      walletBalanceMinor?: number;
+    }>(`/admin/orders/${id}/refund`, {
       method: "POST",
       body: data,
     }),
+  stats: () =>
+    api<{
+      schools: number;
+      activeUsers: number;
+      auditEvents: number;
+      orders: number;
+      paidLast24h: number;
+      pendingPayments: number;
+      failedPayments24h: number;
+      paymentsNeedingReview: number;
+      readyForCollection: number;
+    }>("/admin/stats"),
   payments: (params: { status?: string; needsReview?: boolean } = {}) => {
     const qs = new URLSearchParams();
     if (params.status) qs.set("status", params.status);

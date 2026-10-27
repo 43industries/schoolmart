@@ -7,22 +7,37 @@ import {
 import type { CheckoutCartInput } from "@schoolmart/shared";
 import { AppError, ForbiddenError } from "../../lib/errors.js";
 import type { AuditContext } from "../audit/audit.service.js";
-import { dominantCategory, type CartLine } from "./order-payment.service.js";
+import {
+  dominantCategory,
+  groupLinesByVendor,
+  type CartLine,
+  type VendorGroup,
+} from "./order-payment.service.js";
 import { executeWalletCheckout } from "../wallets/wallet-spend.service.js";
 
-export type { CartLine } from "./order-payment.service.js";
+export type { CartLine, VendorGroup } from "./order-payment.service.js";
 export {
   createPendingOrderFromLines,
+  createPendingOrdersFromVendorGroups,
   createPaidOrderFromLines,
+  createPaidOrdersFromVendorGroups,
   finalizeDirectOrderPayment,
+  finalizeCheckoutGroupOrders,
+  cancelPendingCheckoutOrders,
+  orderIdsFromPaymentMetadata,
   dominantCategory,
+  groupLinesByVendor,
 } from "./order-payment.service.js";
 
 export async function loadCheckoutLines(
   parentUserId: string,
   schoolId: string,
   studentId: string,
-): Promise<{ lines: CartLine[]; subtotalMinor: number }> {
+): Promise<{
+  lines: CartLine[];
+  groups: VendorGroup[];
+  subtotalMinor: number;
+}> {
   const cart = await prisma.cart.findFirst({
     where: { parentUserId },
     include: {
@@ -77,18 +92,9 @@ export async function loadCheckoutLines(
     });
   }
 
-  // Each order is fulfilled, paid out, and delivered per vendor; mixed carts cannot be checked out together.
-  const vendorNames = new Set(cart.items.map((i) => i.product.vendor.name));
-  if (vendorNames.size > 1) {
-    throw new AppError(
-      400,
-      `Your cart has items from ${vendorNames.size} vendors (${[...vendorNames].join(", ")}). Check out one vendor at a time — remove the other vendor's items first.`,
-      "MULTI_VENDOR_CART",
-    );
-  }
-
+  const groups = groupLinesByVendor(lines);
   const subtotalMinor = lines.reduce((s, l) => s + l.priceMinor * l.quantity, 0);
-  return { lines, subtotalMinor };
+  return { lines, groups, subtotalMinor };
 }
 
 export async function checkoutWithWallet(
@@ -96,7 +102,7 @@ export async function checkoutWithWallet(
   input: CheckoutCartInput,
   ctx: AuditContext,
 ) {
-  const { lines, subtotalMinor } = await loadCheckoutLines(
+  const { lines, groups, subtotalMinor } = await loadCheckoutLines(
     parentUserId,
     input.schoolId,
     input.studentId,
@@ -107,6 +113,7 @@ export async function checkoutWithWallet(
     studentId: input.studentId,
     schoolId: input.schoolId,
     lines,
+    groups,
     subtotalMinor,
     category: dominantCategory(lines),
     notes: input.notes,

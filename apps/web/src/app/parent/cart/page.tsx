@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
@@ -24,6 +24,16 @@ const navItems = [
 ];
 
 type PayMethod = "WALLET" | "MPESA" | "CARD" | "BANK";
+
+function formatOrderList(
+  orders?: Array<{ orderNumber: string }>,
+  fallback?: { orderNumber: string } | null,
+) {
+  if (orders && orders.length > 1) {
+    return orders.map((o) => o.orderNumber).join(", ");
+  }
+  return orders?.[0]?.orderNumber ?? fallback?.orderNumber ?? "";
+}
 
 export default function CartPage() {
   const { user, loading } = useAuth();
@@ -64,6 +74,31 @@ export default function CartPage() {
   const selected = children.find((c) => c.student.id === studentId);
   const schoolId = selected?.student.school.id;
 
+  const vendorGroups = useMemo(() => {
+    if (!cart?.items.length) return [];
+    const map = new Map<
+      string,
+      { vendorName: string; items: CartResponse["items"]; subtotalMinor: number }
+    >();
+    for (const item of cart.items) {
+      const key = item.product.vendor.id;
+      const existing = map.get(key);
+      if (existing) {
+        existing.items.push(item);
+        existing.subtotalMinor += item.lineTotalMinor;
+      } else {
+        map.set(key, {
+          vendorName: item.product.vendor.name,
+          items: [item],
+          subtotalMinor: item.lineTotalMinor,
+        });
+      }
+    }
+    return [...map.values()];
+  }, [cart]);
+
+  const vendorCount = vendorGroups.length;
+
   const handleCheckout = async () => {
     if (!studentId || !schoolId) {
       setError("Select a child for this order");
@@ -85,10 +120,16 @@ export default function CartPage() {
         phone: phone || undefined,
       });
       if (result.status === "PAID" && result.order) {
-        setMessage(`Paid · Order ${result.order.orderNumber}`);
+        const nums = formatOrderList(result.orders, result.order);
+        setMessage(
+          result.orders && result.orders.length > 1
+            ? `Paid · ${result.orders.length} orders (${nums})`
+            : `Paid · Order ${nums}`,
+        );
         load();
       } else if (result.status === "PENDING_PAYMENT" && result.payment?.providerRef && result.payment.id) {
         const live = result.payment.provider === "mpesa" && paymentMethod === "MPESA";
+        const nums = formatOrderList(result.orders, result.order);
         setPendingPayment({
           paymentId: result.payment.id,
           providerRef: result.payment.providerRef,
@@ -100,8 +141,8 @@ export default function CartPage() {
         });
         setMessage(
           live
-            ? `Waiting for M-PESA approval · order ${result.order?.orderNumber ?? ""}`
-            : `Awaiting ${paymentMethod} payment for order ${result.order?.orderNumber ?? ""}`,
+            ? `Waiting for M-PESA approval · ${result.orders && result.orders.length > 1 ? `${result.orders.length} orders` : "order"} ${nums}`
+            : `Awaiting ${paymentMethod} payment for ${result.orders && result.orders.length > 1 ? "orders" : "order"} ${nums}`,
         );
       } else {
         setMessage(result.message ?? "Checkout needs your approval on the Wallet page");
@@ -177,7 +218,7 @@ export default function CartPage() {
         <div>
           <h2 className="text-2xl font-bold text-brand-ink">Cart</h2>
           <p className="text-brand-muted">
-            Pay from the child wallet, or charge the order directly via M-PESA, card, or bank.
+            Pay once from the child wallet or M-PESA. Mixed vendors become separate orders.
           </p>
         </div>
         <Button href="/parent/shop" variant="secondary">Continue shopping</Button>
@@ -194,44 +235,56 @@ export default function CartPage() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {cart.items.map((item) => (
-            <Card key={item.id} className="flex items-center justify-between gap-4">
-              <div>
-                <p className="font-semibold text-brand-ink">{item.product.name}</p>
-                <p className="text-sm text-brand-muted">{item.product.vendor.name}</p>
-                <p className="text-sm text-brand-muted">
-                  {formatKES(item.product.priceMinor)} × {item.quantity}
-                </p>
+          {vendorGroups.map((group) => (
+            <div key={group.vendorName} className="space-y-2">
+              <div className="flex items-baseline justify-between px-1">
+                <h3 className="text-sm font-semibold text-brand-ink">{group.vendorName}</h3>
+                <p className="text-sm text-brand-muted">{formatKES(group.subtotalMinor)}</p>
               </div>
-              <div className="flex items-center gap-3">
-                <p className="font-bold text-brand-teal">{formatKES(item.lineTotalMinor)}</p>
-                <Button
-                  variant="secondary"
-                  onClick={async () => {
-                    const updated = await cartApi.updateItem(item.id, item.quantity - 1);
-                    setCart(updated);
-                  }}
-                >
-                  −
-                </Button>
-                <span className="w-6 text-center font-medium">{item.quantity}</span>
-                <Button
-                  variant="secondary"
-                  onClick={async () => {
-                    const updated = await cartApi.updateItem(item.id, item.quantity + 1);
-                    setCart(updated);
-                  }}
-                >
-                  +
-                </Button>
-              </div>
-            </Card>
+              {group.items.map((item) => (
+                <Card key={item.id} className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-semibold text-brand-ink">{item.product.name}</p>
+                    <p className="text-sm text-brand-muted">
+                      {formatKES(item.product.priceMinor)} × {item.quantity}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <p className="font-bold text-brand-teal">{formatKES(item.lineTotalMinor)}</p>
+                    <Button
+                      variant="secondary"
+                      onClick={async () => {
+                        const updated = await cartApi.updateItem(item.id, item.quantity - 1);
+                        setCart(updated);
+                      }}
+                    >
+                      −
+                    </Button>
+                    <span className="w-6 text-center font-medium">{item.quantity}</span>
+                    <Button
+                      variant="secondary"
+                      onClick={async () => {
+                        const updated = await cartApi.updateItem(item.id, item.quantity + 1);
+                        setCart(updated);
+                      }}
+                    >
+                      +
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
           ))}
           <Card className="space-y-4">
             <div className="flex items-center justify-between">
               <p className="font-semibold">Subtotal</p>
               <p className="text-xl font-bold text-brand-teal">{formatKES(cart.subtotalMinor)}</p>
             </div>
+            {vendorCount > 1 && (
+              <p className="rounded-xl bg-brand-teal/5 px-3 py-2 text-sm text-brand-ink">
+                Pays once · creates {vendorCount} vendor orders (one per shop).
+              </p>
+            )}
             {children.length > 0 ? (
               <Select
                 label="Child / school for this order"
@@ -252,8 +305,8 @@ export default function CartPage() {
               options={[
                 { value: "WALLET", label: "Child wallet" },
                 { value: "MPESA", label: "M-PESA (direct)" },
-                { value: "CARD", label: "Card (direct)" },
-                { value: "BANK", label: "Bank (direct)" },
+                { value: "CARD", label: "Card (coming soon)" },
+                { value: "BANK", label: "Bank (coming soon)" },
               ]}
             />
             {paymentMethod === "MPESA" && (
@@ -266,7 +319,15 @@ export default function CartPage() {
               />
             )}
             <Button type="button" disabled={busy || !studentId} onClick={handleCheckout}>
-              {busy ? "Processing…" : paymentMethod === "WALLET" ? "Checkout with wallet" : "Pay now"}
+              {busy
+                ? "Processing…"
+                : paymentMethod === "WALLET"
+                  ? vendorCount > 1
+                    ? `Checkout ${vendorCount} orders with wallet`
+                    : "Checkout with wallet"
+                  : vendorCount > 1
+                    ? `Pay once for ${vendorCount} orders`
+                    : "Pay now"}
             </Button>
             {pendingPayment && (
               <PendingPaymentConfirm

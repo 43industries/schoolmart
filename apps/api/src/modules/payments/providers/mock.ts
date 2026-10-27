@@ -4,6 +4,8 @@ import type {
   PaymentProvider,
   ProviderInitiateInput,
   ProviderInitiateResult,
+  ProviderRefundInput,
+  ProviderRefundResult,
   ProviderWebhookResult,
 } from "./types.js";
 
@@ -31,5 +33,14 @@ export const mockPaymentProvider: PaymentProvider = {
       throw new ValidationError("Webhook body must include providerRef and status");
     }
     return { providerRef: payload.providerRef, status: payload.status };
+  },
+
+  async refund(input: ProviderRefundInput): Promise<ProviderRefundResult> {
+    return {
+      status: "SUCCEEDED",
+      providerRefundRef: `mock-refund-${randomUUID()}`,
+      message: `Mock refund of ${input.amountMinor} for receipt ${input.receipt}`,
+      raw: { mock: true, ...input },
+    };
   },
 };
