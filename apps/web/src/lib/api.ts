@@ -1099,6 +1099,30 @@ export const adminOpsApi = {
       paymentsNeedingReview: number;
       readyForCollection: number;
     }>("/admin/stats"),
+  analytics: (range: "7d" | "30d" = "30d") =>
+    api<{
+      range: "7d" | "30d";
+      from: string;
+      to: string;
+      kpis: {
+        ordersCreated: number;
+        gmvPaidMinor: number;
+        paymentsSucceededMinor: number;
+        paymentSuccessRate: number | null;
+        collectedCount: number;
+      };
+      daily: Array<{
+        date: string;
+        ordersCreated: number;
+        paymentsSucceeded: number;
+        paymentsFailed: number;
+        gmvPaidMinor: number;
+      }>;
+      funnel: Array<{ key: string; label: string; count: number }>;
+      paymentMix: Array<{ method: string; count: number; amountMinor: number }>;
+      topSchools: Array<{ id: string; name: string; orderCount: number; gmvMinor: number }>;
+      topVendors: Array<{ id: string; name: string; orderCount: number; gmvMinor: number }>;
+    }>(`/admin/analytics?range=${range}`),
   payments: (params: { status?: string; needsReview?: boolean } = {}) => {
     const qs = new URLSearchParams();
     if (params.status) qs.set("status", params.status);

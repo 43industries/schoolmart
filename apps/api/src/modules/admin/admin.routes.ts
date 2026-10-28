@@ -14,6 +14,7 @@ import {
 } from "../payments/vendor-payouts.service.js";
 import { listPaymentsForAdmin, reconcileOpenPayments } from "../payments/payments.reconcile.js";
 import { getRefundedMinor, refundOrderToWallet } from "../orders/order-lifecycle.service.js";
+import { getAdminAnalytics, parseAnalyticsRange } from "./admin-analytics.service.js";
 
 const refundSchema = z.object({
   amountMinor: z.number().int().positive().optional(),
@@ -122,6 +123,12 @@ export async function adminRoutes(app: FastifyInstance) {
       ctx: auditContextFromRequest(req, req.user!.sub),
     });
     return reply.send({ ...result, refundedTotalMinor: await getRefundedMinor(id) });
+  });
+
+  app.get("/analytics", { preHandler: [authenticate, requireSuperAdminOrFinance()] }, async (req, reply) => {
+    const query = req.query as { range?: string };
+    const analytics = await getAdminAnalytics(parseAnalyticsRange(query.range));
+    return reply.send(analytics);
   });
 
   app.get("/stats", { preHandler: [authenticate, requireSuperAdminOrFinance()] }, async (_req, reply) => {
