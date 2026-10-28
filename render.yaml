@@ -1,0 +1,37 @@
+# Render Blueprint — API + Postgres
+# After create: set WEB_URL to your Vercel origin (e.g. https://schoolmart-api.vercel.app).
+# On Vercel set: API_ORIGIN=https://<this-service>.onrender.com  (no /api/v1)
+#
+# Migrate runs at build so start only binds PORT (avoids Render "no open ports" while migrate runs).
+
+services:
+  - type: web
+    name: schoolmart-api
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: .
+    buildCommand: pnpm install && pnpm build:api && pnpm --filter @schoolmart/db migrate:deploy
+    startCommand: pnpm start:api:server
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: schoolmart-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: COOKIE_SECRET
+        generateValue: true
+      - key: WEB_URL
+        sync: false
+      - key: DEMO_PASSWORD
+        value: Demo@SchoolMart2026
+
+databases:
+  - name: schoolmart-db
+    plan: free
+    databaseName: schoolmart
+    user: schoolmart
