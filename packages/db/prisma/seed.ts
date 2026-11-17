@@ -1,4 +1,4 @@
-import { PrismaClient, Role, ScopeType, UserStatus, SchoolStatus, LinkStatus, Relationship, VendorStatus, ProductStatus, DeliveryPartnerStatus, OrderStatus } from "@prisma/client";
+import { PrismaClient, Role, ScopeType, UserStatus, SchoolStatus, LinkStatus, Relationship, VendorStatus, ProductStatus, DeliveryPartnerStatus, OrderStatus, ActivityStatus } from "@prisma/client";
 import argon2 from "argon2";
 import { randomBytes } from "crypto";
 
@@ -270,8 +270,7 @@ async function main() {
   const studentUser = await prisma.user.upsert({
     where: { email: "student.brian@demo.ke" },
     update: {
-      passwordHash,
-      status: UserStatus.ACTIVE,
+      ...demoUserRepair(passwordHash),
       firstName: brianStudent.firstName,
       lastName: brianStudent.lastName,
     },
@@ -309,6 +308,35 @@ async function main() {
     update: {},
   });
   console.log(`✓ Student login: student.brian@demo.ke (GF-2024-001)`);
+
+  // Published funkies per school so student/parent portals have something to show
+  const funkieStarts = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  for (const school of createdSchools) {
+    const existing = await prisma.schoolActivity.findFirst({
+      where: { schoolId: school.id, title: "[DEMO] Weekend Funkie" },
+    });
+    if (!existing) {
+      await prisma.schoolActivity.create({
+        data: {
+          schoolId: school.id,
+          title: "[DEMO] Weekend Funkie",
+          description: "Demo published activity — visible to students and parents at this school.",
+          category: "FUNKIES",
+          location: "School grounds",
+          startsAt: funkieStarts,
+          feeMinor: 0,
+          status: ActivityStatus.PUBLISHED,
+          createdByUserId: schoolAdmin1.id,
+        },
+      });
+    } else if (existing.status !== ActivityStatus.PUBLISHED) {
+      await prisma.schoolActivity.update({
+        where: { id: existing.id },
+        data: { status: ActivityStatus.PUBLISHED },
+      });
+    }
+  }
+  console.log(`✓ Demo funkies: published for ${createdSchools.length} schools`);
 
   // Marketplace seed
   const meals = await prisma.category.upsert({

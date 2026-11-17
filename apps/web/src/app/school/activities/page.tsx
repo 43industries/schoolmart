@@ -53,7 +53,15 @@ export default function SchoolActivitiesPage() {
 
   const load = () => {
     if (!schoolId) return;
-    schoolAdminApi.activities(schoolId).then((res) => setActivities(res.activities as Activity[])).catch(() => {});
+    schoolAdminApi
+      .activities(schoolId)
+      .then((res) => {
+        setActivities(res.activities as Activity[]);
+        setError("");
+      })
+      .catch((err) => {
+        setError(err instanceof ApiError ? err.message : "Could not load activities");
+      });
   };
 
   useEffect(() => {
@@ -115,7 +123,10 @@ export default function SchoolActivitiesPage() {
     <PortalLayout title="School Admin Portal" navItems={navItems}>
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-brand-ink">Funkies & activities</h2>
-        <p className="text-brand-muted">Create school activities parents can register and fund.</p>
+        <p className="text-brand-muted">
+          Create school activities parents and students at <strong>this school</strong> can see once status is{" "}
+          <strong>Published</strong>.
+        </p>
       </div>
 
       {error && <div className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}

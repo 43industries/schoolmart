@@ -97,7 +97,9 @@ export default function StudentPortalPage() {
 
   useEffect(() => {
     if (!user) return;
-    load().catch(() => {});
+    load().catch((err) => {
+      setError(err instanceof ApiError ? err.message : "Could not load student portal");
+    });
     const poll = setInterval(() => {
       studentsApi.wallet().then(setWallet).catch(() => {});
     }, 8000);
@@ -328,7 +330,10 @@ export default function StudentPortalPage() {
           </CardDescription>
         </CardHeader>
         {activities.length === 0 ? (
-          <p className="text-sm text-brand-muted">No published activities yet.</p>
+          <p className="text-sm text-brand-muted">
+            No published activities for {profile?.school.name ?? "your school"} yet. School admins publish funkies under
+            School → Funkies; only students at that same school can see them.
+          </p>
         ) : (
           <div className="space-y-3">
             {activities.map((a) => (
