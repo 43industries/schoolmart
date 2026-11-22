@@ -251,7 +251,12 @@ async function main() {
     const student = students[link.studentIdx]!;
     await prisma.parentStudentLink.upsert({
       where: { parentUserId_studentId: { parentUserId: parent.id, studentId: student.id } },
-      update: {},
+      update: {
+        status: link.status,
+        approvedByUserId: link.status === LinkStatus.ACTIVE ? schoolAdmin1.id : undefined,
+        approvedAt: link.status === LinkStatus.ACTIVE ? new Date() : null,
+        rejectedReason: null,
+      },
       create: {
         parentUserId: parent.id,
         studentId: student.id,

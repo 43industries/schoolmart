@@ -47,7 +47,10 @@ export default function ParentActivitiesPage() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (user) load().catch(() => {});
+    if (!user) return;
+    load().catch((err) => {
+      setError(err instanceof ApiError ? err.message : "Could not load activities");
+    });
   }, [user]);
 
   const handleRegister = async (activityId: string) => {
